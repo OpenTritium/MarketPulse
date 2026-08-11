@@ -40,6 +40,29 @@ def test_create_app_health_and_shutdown(tmp_path: Path) -> None:
     assert response.headers["X-Request-Id"]
 
 
+def test_status_endpoint_shape(tmp_path: Path) -> None:
+    config = build_config(turso_url=f"file:{tmp_path / 'market.db'}")
+    application = create_app(
+        cfg=config,
+        collect_interval_seconds=3600,
+        collect_delay_seconds=3600,
+    )
+
+    with TestClient(application) as client:
+        response = client.get("/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["app"] == "ok"
+    assert body["events"] == 0
+    # 测试环境无 wigolo，应优雅报告不可达而非报错
+    assert body["wigolo"]["reachable"] is False
+    assert "collector" in body
+    assert body["collector"]["running"] is False
+    assert "last_result" in body["collector"]
+    assert "last_error" in body["collector"]
+
+
 def test_timeline_cursor_pagination(tmp_path: Path) -> None:
     config = build_config(turso_url=f"file:{tmp_path / 'market.db'}")
     application = create_app(

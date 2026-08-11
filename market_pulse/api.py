@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 import uuid
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Callable
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast, override
 
+import httpx
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -31,6 +33,7 @@ from market_pulse.factors import factor_descriptions
 from market_pulse.scheduler import (
     DEFAULT_COLLECT_DELAY_SECONDS,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
+    collector_status,
     run_scheduler,
 )
 from market_pulse.timestamps import format_utc_timestamp
@@ -42,6 +45,7 @@ _log = logging.getLogger("api")
 class Runtime:
     """一个 API 进程持有的共享运行时资源。"""
 
+    cfg: Config
     store: Store
     embedder: Embedder
 
@@ -63,7 +67,7 @@ def _lifespan_factory(
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None]:
         store = Store(config)
         embedder = Embedder(config)
-        app_instance.state.runtime = Runtime(store=store, embedder=embedder)
+        app_instance.state.runtime = Runtime(cfg=config, store=store, embedder=embedder)
         scheduler_task = asyncio.create_task(
             run_scheduler(
                 config,
@@ -240,9 +244,61 @@ def _avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 3) if values else None
 
 
+async def _probe_wigolo(cfg: Config) -> dict[str, Any]:
+    """对 wigolo MCP 做一次轻量 initialize 探活。"""
+    headers = {"Accept": "application/json, text/event-stream"}
+    if cfg.wigolo_token:
+        headers["Authorization"] = f"Bearer {cfg.wigolo_token}"
+    started = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.post(
+                cfg.wigolo_url,
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "market-pulse-status", "version": "1"},
+                    },
+                },
+            )
+        return {
+            "reachable": response.status_code == 200,
+            "latency_ms": round((time.monotonic() - started) * 1000),
+        }
+    except Exception:
+        return {"reachable": False, "latency_ms": None}
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/status")
+async def status(request: Request) -> dict[str, Any]:
+    """服务状态汇总：应用/数据库/wigolo/采集器可观测性。"""
+    runtime = _runtime(request)
+    try:
+        row = runtime.store.conn.execute("SELECT COUNT(*) FROM events").fetchone()
+        events = int(row[0]) if row else 0
+    except Exception:
+        events = None
+    return {
+        "app": "ok",
+        "events": events,
+        "wigolo": await _probe_wigolo(runtime.cfg),
+        "collector": {
+            "running": collector_status.running,
+            "last_run_at": collector_status.last_run_at,
+            "last_error": collector_status.last_error,
+            "last_result": collector_status.last_result,
+        },
+    }
 
 
 @router.get("/timeline")

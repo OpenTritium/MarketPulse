@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 from .config import Config
 from .embed import Embedder
@@ -12,7 +15,21 @@ from .pipeline import run_collect
 
 DEFAULT_COLLECT_INTERVAL_SECONDS = 30 * 60
 DEFAULT_COLLECT_DELAY_SECONDS = 30
+_COLLECT_TIMEOUT_SECONDS = 900
 _DURATION_PATTERN = re.compile(r"(?P<amount>\d+)(?P<unit>[smh])")
+
+
+@dataclass
+class CollectorStatus:
+    """采集器运行状态（供 /status 端点观测）。"""
+
+    running: bool = False
+    last_run_at: str | None = None
+    last_result: dict[str, Any] | None = field(default=None)
+    last_error: str | None = None
+
+
+collector_status = CollectorStatus()
 
 
 def parse_duration_seconds(value: str, *, allow_zero: bool) -> int:
@@ -53,9 +70,22 @@ async def run_scheduler(
 
     await asyncio.sleep(delay_seconds)
     while True:
+        collector_status.running = True
         try:
-            stats = await run_collect(cfg, embedder=embedder)
+            stats = await asyncio.wait_for(
+                run_collect(cfg, embedder=embedder), timeout=_COLLECT_TIMEOUT_SECONDS
+            )
+            collector_status.last_run_at = datetime.now(UTC).isoformat()
+            collector_status.last_result = stats
+            collector_status.last_error = None
             log.info("采集完成: %s", stats)
-        except Exception:
+        except TimeoutError:
+            # MCP 会话异常时 fastmcp 可能静默挂起，总超时兜底放弃本轮
+            collector_status.last_error = "采集超时（>900s）"
+            log.warning("本轮采集超时（>900s），放弃本轮，等待下一轮")
+        except Exception as exc:
+            collector_status.last_error = repr(exc)
             log.exception("本轮采集失败")
+        finally:
+            collector_status.running = False
         await asyncio.sleep(interval_seconds)

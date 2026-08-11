@@ -1,6 +1,9 @@
-"""wigolo MCP 客户端：基于 fastmcp（pydantic-ai 的 MCP 底座）。
+"""wigolo REST 客户端：绕开 MCP streamable-http 会话在长负载下的僵死。
 
-替代手写 JSON-RPC：session 管理、SSE/streamable-http、重连由 fastmcp 处理。
+实测结论：MCP 会话内大量 tools/call 后 wigolo 事件循环永久阻塞（探活无响应，
+重启才恢复）；而 REST /v1/fetch 连续 100+ 请求稳定。pipeline 只使用 fetch，
+直接调用 REST 端点，响应 markdown 字段与采集层文本提取兼容。
+
 使用方式（async）：
     async with WigoloMCP(cfg) as mcp:
         result = await mcp.fetch("https://...", max_content_chars=30000)
@@ -8,63 +11,63 @@
 
 from __future__ import annotations
 
-import json
+import asyncio
 from typing import Any, Self
 
-from fastmcp import Client
-from fastmcp.client.transports import StreamableHttpTransport
+import httpx
 
 from .config import Config
+
+_CALL_TIMEOUT_SECONDS = 60.0
 
 
 class MCPError(RuntimeError):
     pass
 
 
-def _parse_text(result: Any) -> Any:
-    """CallToolResult → 解析后的 JSON（wigolo 工具返回 JSON 文本）。"""
-    content = getattr(result, "content", None) or []
-    texts = [c.text for c in content if getattr(c, "type", "") == "text" and c.text]
-    joined = "\n".join(texts).strip()
-    if not joined:
-        return None
-    try:
-        return json.loads(joined)
-    except (ValueError, TypeError):
-        return joined
-
-
 class WigoloMCP:
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg: Config = cfg
-        headers = (
+        # wigolo REST 端点：/mcp → /v1（如 http://127.0.0.1:3333/mcp）
+        self._rest_base: str = cfg.wigolo_url.removesuffix("/mcp") + "/v1"
+        self._headers: dict[str, str] = (
             {"Authorization": "Bearer " + cfg.wigolo_token}
             if cfg.wigolo_token
-            else None
+            else {}
         )
-        self._transport: StreamableHttpTransport = StreamableHttpTransport(
-            cfg.wigolo_url, headers=headers
-        )
-        self._client: Client[StreamableHttpTransport] = Client(
-            self._transport, name="wigolo"
+        self._client: httpx.AsyncClient = httpx.AsyncClient(
+            timeout=_CALL_TIMEOUT_SECONDS
         )
 
     async def __aenter__(self) -> Self:
-        _ = await self._client.__aenter__()
         return self
 
     async def __aexit__(self, *args: object) -> None:
-        await self._client.__aexit__(*args)
-
-    async def _call(self, tool: str, arguments: dict[str, Any]) -> Any:
-        try:
-            result = await self._client.call_tool(tool, arguments)
-        except Exception as e:
-            raise MCPError(f"工具 {tool} 调用失败: {e}") from e
-        if getattr(result, "is_error", False) or getattr(result, "isError", False):
-            raise MCPError(f"工具 {tool} 执行失败: {result}")
-        return _parse_text(result)
+        await self._client.aclose()
 
     async def fetch(self, url: str, **kw: Any) -> Any:
-        return await self._call("fetch", {"url": url, **kw})
+        """抓取页面并返回 JSON；kw 透传 max_content_chars / render_js / actions。"""
+        payload: dict[str, Any] = {"url": url, "timeoutMs": 45000}
+        if kw.get("max_content_chars"):
+            payload["max_content_chars"] = kw["max_content_chars"]
+        if kw.get("render_js"):
+            payload["render_js"] = kw["render_js"]
+        if kw.get("actions"):
+            payload["actions"] = kw["actions"]
+        try:
+            response = await asyncio.wait_for(
+                self._client.post(
+                    f"{self._rest_base}/fetch",
+                    json=payload,
+                    headers=self._headers,
+                ),
+                timeout=_CALL_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as exc:
+            raise MCPError(f"fetch 超时（>{_CALL_TIMEOUT_SECONDS:.0f}s）: {url}") from exc
+        except httpx.HTTPError as exc:
+            raise MCPError(f"fetch 调用失败: {exc}") from exc
+        if response.status_code >= 400:
+            raise MCPError(f"fetch 失败 HTTP {response.status_code}: {url}")
+        return response.json()

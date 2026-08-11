@@ -8,10 +8,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY market_pulse/ market_pulse/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable \
+    uv sync --frozen --no-dev --no-editable --reinstall-package market-pulse \
     && find /app/.venv -type d -name __pycache__ -prune -exec rm -rf {} + \
     && find /app/.venv/lib/python3.13/site-packages \
-    -type d \( -name test -o -name tests \) -prune -exec rm -rf {} +
+      -type d \( -name test -o -name tests \) -prune -exec rm -rf {} +
 
 FROM python:3.13-slim
 
