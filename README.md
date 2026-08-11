@@ -1,98 +1,73 @@
-# Market Emotion · 市场情绪采集服务
+# Market Pulse · 市场情绪采集服务
 
-通过 wigolo MCP 采集 A 股/中国宏观新闻（财联社电报、央行/证监会/统计局公告等 17 个源），LLM 生成摘要+情感分+市场因子，本地 fastembed 向量化，存储到 Turso（libSQL 原生向量），提供情感聚合查询 API。
+通过 wigolo MCP 采集 A 股/中国宏观新闻，LLM 生成摘要与情绪分，本地向量模型入库 libSQL，提供 FastAPI 查询接口。API 与后台采集调度器同进程运行，一个容器全包。
 
-**设计原则：轻量**（无 agent 框架、无 ORM、依赖 6 个、~1300 行代码）。
+## 部署
 
-## 架构
-
-```text
-docker compose (api + collector) ──▶ scheduler.py (30min 常驻) ──▶ collect.py
-                            │ 1. wigolo MCP fetch 列表页（JSON-RPC over HTTP，~90 行自研客户端）
-                            │ 2. LLM 提取条目 {title, url, published_at, content}
-                            │ 3. 去重：url + content_hash（内容变化 → 新版本）
-                            │ 4. LLM 结构化输出 {summary, sentiment, factors, related_symbols}
-                            │ 5. fastembed (bge-small-zh-v1.5, 512 维) → 摘要向量
-                            │ 6. libsql 写入 articles + article_embeddings
-                            ▼
-                    Turso 本地文件库 (file:data/market.db) ◀──── api.py (FastAPI :8000)
-                        /health /sentiment/overview|timeseries|factors
-                        /articles /articles/{url}/versions /search
-```
-
-## 快速开始
+前置：wigolo MCP 服务运行在宿主机 `127.0.0.1:3333`；`.env` 需包含 `LLM_API_KEY`（密钥只从环境变量读）。
 
 ```bash
-uv venv .venv --python 3.13
-uv pip install -e ".[dev]"
-cp .env.example .env   # 填入密钥（LLM_API_KEY / WIGOLO_TOKEN）
-export https_proxy=http://127.0.0.1:7890  # opencode/HF 需要代理
+cp .env.example .env   # 填 LLM_API_KEY，按需填 WIGOLO_TOKEN、HTTP(S)_PROXY
 
-# 采集（首次会下载 embedding 模型 ~90MB）
-.venv/bin/python collect.py --sources 财联社电报
-.venv/bin/python collect.py --db file:test.db --llm-model deepseek-v4-flash  # CLI 覆盖非敏感配置
+docker build -t market-pulse .
+# Linux 用 host network 直连宿主机 MCP；data/models 挂卷持久化
+docker run -d --name market-pulse \
+  --restart unless-stopped \
+  --network host \
+  --env-file .env \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/models:/models" \
+  market-pulse \
+  --collect-interval 30m \
+  --collect-delay 30s
 
-# 查询 API
-.venv/bin/uvicorn api:app --port 8000
-curl 'localhost:8000/sentiment/overview'
-curl 'localhost:8000/search?q=降准'
+curl 'http://127.0.0.1:8000/health'   # {"status":"ok"}
+docker logs -f market-pulse
 ```
 
-## 配置
+常用启动参数（时长后缀支持 `s` / `m` / `h`）：
 
-**密钥只进环境变量**（无 CLI 入口）：`LLM_API_KEY` / `WIGOLO_TOKEN`（环境变量优先，`.env` 文件兜底）
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `--collect-interval` | `30m` | 采集轮次间隔，必须 > 0 |
+| `--collect-delay` | `30s` | 启动后首轮延迟；`0s` 立即采集 |
 
-**非敏感配置**：默认值内联在代码中，CLI 参数是唯一覆盖入口：`--db` / `--llm-base-url` / `--llm-model` / `--embedding-model`
+> 固定单 worker：增加 worker 会启动重复的后台采集器。首轮启动会自动下载 embedding 模型（约 100MB，需要代理时配置 `HTTPS_PROXY`）。
+
+## API
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /health` | 健康检查 |
+| `GET /timeline?limit=50&offset=0` | 事件时间线（倒序，带来源数组） |
+| `GET /events/{event_id}` | 事件详情 + 多来源报道列表 |
+| `GET /sentiment/overview` | 情绪总览：24h 均值、7 日均值与趋势差 |
+| `GET /sentiment/timeseries?window=day&hours=72` | 情绪时序：均值/计数/正负占比，按小时或天分桶 |
+| `GET /sentiment/factors?hours=72` | 因子分解：各因子平均情绪与覆盖率 |
+| `GET /search?q=降息&k=10` | 语义检索：按事件摘要向量近邻 |
 
 ```bash
-.venv/bin/python collect.py --db file:test.db --llm-model deepseek-v4-flash
+curl 'http://127.0.0.1:8000/timeline?limit=5'
+curl 'http://127.0.0.1:8000/sentiment/overview'
+curl 'http://127.0.0.1:8000/search?q=央行+降准'
 ```
 
-## 部署（Docker + uv）
+## 常见问题
 
-```bash
-cp .env.example .env   # 填入密钥
+**如何采集？**
+每轮采集：并发抓取各源列表页 → LLM 提取条目（每源最多 20 条最新）→ 抓取正文 → 数据库去重 → LLM 分析（相关判定 + 摘要 + 情绪 + 因子）→ 批量向量化 → 单事务入库。源清单集中在 `market_pulse/sources.py`（财联社、华尔街见闻、央行/证监会/统计局公告、新华社等，全部为财经/监管/宏观机构）。
 
-docker compose up -d --build
-curl localhost:8000/health          # API 健康检查
-curl localhost:8000/sentiment/overview  # 情绪总览
-docker compose logs -f collector    # 采集调度日志
-```
+**如何保证及时性？**
+后台调度器每 30 分钟自动跑一轮（`--collect-interval` 可调）；抓取与 LLM 分析各 4 路并发；JS 渲染站点（财联社、华尔街见闻等）自动开启渲染。`--collect-delay 0s` 可让容器启动即采集。
 
-- **双容器**：`api`（uvicorn 常驻，HEALTHCHECK /health）+ `collector`（scheduler.py 常驻，每 30 分钟全量采集，`COLLECT_INTERVAL` 可调）
-- **uv 构建**：uv.lock 锁依赖（`uv sync --frozen` 保证与开发环境一致）、`UV_COMPILE_BYTECODE=1` 预编译、`/root/.cache/uv` 构建缓存挂载、pyproject+lock 分层缓存
-- **非 root**：entrypoint chown 数据卷后 gosu 降权到 appuser（uid 1000，对齐宿主机）
-- **network_mode: host**：宿主机网络——wigolo MCP (127.0.0.1:3333) 与代理 (127.0.0.1:7890) 直通
-- **数据卷**：`./data`（数据库，WAL 模式多进程安全）+ `./models`（embedding 模型缓存，首次运行下载 ~90MB）
-- 密钥从 `.env` 注入（env_file），不进入镜像
-- 手动采集：`docker compose exec collector python -m market_emotion.cli -s 财联社电报`
+**如何存储？**
+libSQL（SQLite 兼容），默认本地单文件 `data/market.db`（WAL 模式，挂卷即持久化）。连接串直接透传给 libsql：可填本地 `file:` 路径，也可填远程 `libsql://` / `https://` URL（CLI 采集命令 `--db` 可传，token 需带在 URL 上如 `?authToken=...`；远程需服务端支持向量索引）。三张表：`events`（事件、情绪、因子聚合）、`reports`（原文与内容指纹）、`event_embeddings`（512 维向量 + 向量索引）。时间戳统一 RFC 3339 UTC。
 
-## 数据模型（事件时间线）
+**如何避免重复入库？**
+两层去重：① 精确去重——`reports` 表 `UNIQUE(url, content_hash)`，指纹 = sha256(URL+标题+正文)，入库前先查库，重复报道直接跳过、不调 LLM；② 语义合并——48 小时窗口内向量相似度达标（cosine < 0.25）的报道视为同一事件合并，情绪与因子按报道数滚动平均。
 
-- `events`：**合并后的事件实体**（时间线条目）——uuid7 主键（时间有序，插入即按时间排）；同源/跨源报道同一事件时自动合并（向量相似度 + 48h 时间窗），`sentiment`/`factors` 滚动平均，`last_seen_at` 更新
-- `reports`：报道明细——同一事件的多个来源，`source` 数组从这聚合（`UNIQUE (url, content_hash)` 去重）
-- `event_embeddings`：事件摘要向量（F32_BLOB 512 维 + `libsql_vector_idx` + `vector_top_k`）——合并检索 + 语义搜索
+**如何避免采集到无关财经的新闻？**
+两道闸：源头——源清单只收录财经/监管/宏观机构；判定——LLM 按「从严」标准判断相关性（文化、体育、娱乐、生活方式、普通公司事务一律判为不相关），不相关的报道跳过入库和向量化，不污染查询结果。
 
-## 情绪查询
-
-按市场配置情绪因子（`market_emotion/factors.py`，加市场不改代码）：
-
-| 市场 | 因子 |
-|---|---|
-| a-share | policy 政策 / liquidity 流动性 / macro 宏观 / regulation 监管 / industry 行业 |
-| us | fed / macro / earnings / tech / geopolitics |
-| crypto | etf / regulation / macro / adoption |
-
-API 三层下钻：`/sentiment/overview`（总览+趋势）→ `/sentiment/timeseries`（时序）→ `/sentiment/factors`（因子分解）→ `/articles`（原始新闻）。
-
-## 技术选型要点
-
-- **Pydantic AI + fastmcp（半 harness）**：MCP 层用 fastmcp（官方生态），LLM 层用 pydantic-ai Agent + PromptedOutput（schema 验证 + 自动重试）；确定性流水线无需 agent 循环，编排层保持显式
-- **中转端点约束**：opencode 中转 thinking 模式拒绝 tool_choice、不支持 response_format=json_schema，实测后确定 `openai_reasoning_effort=none` + PromptedOutput 方案
-- **libsql-experimental**：唯一支持本地嵌入式向量搜索的官方 Python 客户端；官方新推 pyturso 实测不支持 `libsql_vector_idx`
-
-## 已知限制
-
-- 列表页提取依赖 LLM，每源每轮限 20 条（`sources.py` 可调）
-- 快讯型源（财联社）的 url 每次刷新稳定，去重有效；公告型源列表页结构差异需按需调 prompt
-- embedding 维度锁死 512：换模型需清空 `article_embeddings` 重建
+**如何节省 token？**
+去重前置（重复报道不调 LLM）；正文截断（列表页 30K/正文 20K 字符，分析 prompt 只取前 6000 字）；每源每轮最多 20 条；LLM 关闭 thinking（`reasoning_effort=none`），输出压缩为 ≤30 字标题 + ≤120 字摘要；不相关报道不 embedding 不入库。embedding 用本地 `BAAI/bge-small-zh-v1.5`，不走 API。

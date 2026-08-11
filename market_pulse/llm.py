@@ -8,12 +8,15 @@
 """
 
 from __future__ import annotations
+
 from typing import Any
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.output import PromptedOutput
 from pydantic_ai.providers.openai import OpenAIProvider
+
 from .config import Config
 from .factors import factor_descriptions
 
@@ -122,21 +125,18 @@ class Analyzer:
     async def extract_items(
         self, page_text: str, base_url: str, limit: int = 10
     ) -> list[NewsItem]:
-        """从列表页 markdown 提取条目。失败返回空列表。"""
+        """从列表页 markdown 提取条目；失败由采集层按源记录。"""
         agent = self._agent(
             _NewsItemList,
             f"""从页面内容中提取新闻/公告条目（JSON 对象，字段 items 为数组）：
 1. 只提取页面顶部最近的 {limit} 条
 2. title 为条目标题；url 必须是完整 URL（相对路径补全为 {base_url} 域名下）
-3. published_at 页面给出则保留，否则空字符串
+3. published_at 仅在页面给出可明确解析的带时区 ISO 8601 时间时填写；统一输出 RFC 3339 UTC（`Z`）格式，否则空字符串
 4. content：页面本身含正文则填（≤800字），只有链接则空字符串
 5. 跳过导航、广告、页脚等非内容条目""",
             retries=2,
         )
-        try:
-            result = await agent.run(page_text[:20000])
-            wrapper = result.output
-            items = wrapper.items if isinstance(wrapper, _NewsItemList) else []
-        except Exception:  # noqa: BLE001 - 提取失败不中断采集
-            return []
-        return [it for it in items if it.title and it.url]
+        result = await agent.run(page_text[:20000])
+        wrapper = result.output
+        items = wrapper.items if isinstance(wrapper, _NewsItemList) else []
+        return [item for item in items if item.title and item.url]

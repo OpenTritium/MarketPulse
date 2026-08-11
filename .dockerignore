@@ -1,11 +1,15 @@
 .venv/
+.git/
+.pi-subagents/
 data/
 models/
+tests/
 .env
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 Dockerfile
-docker-compose.yml
 README.md
 docs/
+AGENTS.md

@@ -8,3 +8,5 @@ data/
 *.db-shm
 .pytest_cache/
 models/
+.pi-subagents/
+.ruff_cache/

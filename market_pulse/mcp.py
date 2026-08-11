@@ -7,10 +7,13 @@
 """
 
 from __future__ import annotations
+
 import json
-from typing import Any
+from typing import Any, Self
+
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+
 from .config import Config
 
 
@@ -47,19 +50,19 @@ class WigoloMCP:
             self._transport, name="wigolo"
         )
 
-    async def __aenter__(self) -> WigoloMCP:
+    async def __aenter__(self) -> Self:
         _ = await self._client.__aenter__()
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         await self._client.__aexit__(*args)
 
     async def _call(self, tool: str, arguments: dict[str, Any]) -> Any:
         try:
             result = await self._client.call_tool(tool, arguments)
-        except Exception as e:  # noqa: BLE001 - fastmcp 异常统一包装
+        except Exception as e:
             raise MCPError(f"工具 {tool} 调用失败: {e}") from e
-        if getattr(result, "isError", False):
+        if getattr(result, "is_error", False) or getattr(result, "isError", False):
             raise MCPError(f"工具 {tool} 执行失败: {result}")
         return _parse_text(result)
 
