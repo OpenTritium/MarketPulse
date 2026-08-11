@@ -10,12 +10,12 @@ COPY server.ts tsconfig.json assets.d.ts ./
 COPY public/ public/
 RUN bun build --compile --minify --outfile /app/market-pulse-web server.ts
 
-# 运行阶段：编译产物自包含，只需 glibc 基础镜像
-FROM debian:bookworm-slim
+# 运行阶段：产物仅依赖 glibc（无 ICU/libstdc++），distroless base 即最小运行环境
+FROM gcr.io/distroless/base-debian13
 
 COPY --from=builder /app/market-pulse-web /usr/local/bin/market-pulse-web
 
 ENV PORT=8443
 EXPOSE 8443
 
-CMD ["market-pulse-web"]
+CMD ["/usr/local/bin/market-pulse-web"]

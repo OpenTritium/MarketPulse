@@ -17,7 +17,10 @@ const PORT = Number(process.env.PORT ?? 8443);
 
 const ASSETS: Record<string, { body: string; contentType: string }> = {
   "/": { body: String(indexHtml), contentType: "text/html; charset=utf-8" },
-  "/index.html": { body: String(indexHtml), contentType: "text/html; charset=utf-8" },
+  "/index.html": {
+    body: String(indexHtml),
+    contentType: "text/html; charset=utf-8",
+  },
   "/app.js": { body: appJs, contentType: "text/javascript; charset=utf-8" },
   "/style.css": { body: styleCss, contentType: "text/css; charset=utf-8" },
 };
@@ -26,10 +29,7 @@ const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 async function proxyApi(request: Request, url: URL): Promise<Response> {
   // 剥掉 /api 前缀再转发到后端
-  const upstream = new URL(
-    url.pathname.replace(/^\/api/, "") + url.search,
-    BACKEND_URL,
-  );
+  const upstream = new URL(url.pathname.replace(/^\/api/, "") + url.search, BACKEND_URL);
   const headers = new Headers(request.headers);
   headers.delete("host");
   const response = await fetch(upstream, {

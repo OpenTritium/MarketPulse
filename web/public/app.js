@@ -126,13 +126,7 @@ function renderEvent(event) {
   meta.append(el("span", null, metaParts.join(" ")));
   meta.append(sentimentSpan(event.sentiment));
   const impact = event.impact != null ? ` · 影响 ${event.impact.toFixed(2)}` : "";
-  meta.append(
-    el(
-      "span",
-      null,
-      `${impact} · 报道 ${event.report_count ?? 1}`,
-    ),
-  );
+  meta.append(el("span", null, `${impact} · 报道 ${event.report_count ?? 1}`));
   card.append(meta);
   if (event.summary) card.append(el("div", "summary", event.summary));
   if (event.sources?.length) {

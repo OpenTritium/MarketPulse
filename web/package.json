@@ -7,11 +7,20 @@
     "dev": "bun run server.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint server.ts public/app.js",
+    "lint:css": "stylelint public/style.css",
+    "lint:html": "html-validate public/index.html",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "check": "bun run typecheck && bun run lint && bun run lint:css && bun run lint:html && bun run fmt:check",
     "build": "bun build --compile --minify --outfile dist/market-pulse-web server.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.14",
+    "html-validate": "^11.6.2",
     "oxlint": "^1.78.0",
+    "prettier": "^3.9.6",
+    "stylelint": "^17.14.1",
+    "stylelint-config-standard": "^40.0.0",
     "typescript": "^7.0.2"
   }
 }

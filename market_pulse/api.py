@@ -150,7 +150,9 @@ def _register_error_handlers(application: FastAPI) -> None:
             exc.status_code if isinstance(exc, StarletteHTTPException) else 500
         )
         message = (
-            str(exc.detail) if isinstance(exc, StarletteHTTPException) else "服务器内部错误"
+            str(exc.detail)
+            if isinstance(exc, StarletteHTTPException)
+            else "服务器内部错误"
         )
         return JSONResponse(
             status_code=status_code,
@@ -197,9 +199,7 @@ def _register_error_handlers(application: FastAPI) -> None:
     application.add_exception_handler(HTTPException, http_exception_handler)
     # FastAPI 0.141 中 fastapi.HTTPException 是 starlette.HTTPException 的子类；
     # 路由未匹配抛的是 starlette 类实例，两个键都要注册才覆盖所有 404。
-    application.add_exception_handler(
-        StarletteHTTPException, http_exception_handler
-    )
+    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(
         RequestValidationError, validation_exception_handler
     )
