@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market Pulse · 市场情绪</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Market Pulse · 市场情绪</h1>
+    <div class="header-actions">
+      <input id="search-input" type="search" placeholder="语义搜索，如：央行 降准" />
+      <button id="search-btn">搜索</button>
+      <button id="refresh-btn">刷新</button>
+      <span id="updated-at" class="muted"></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="overview" class="cards"></section>
+
+    <section id="search-results" hidden>
+      <h2>搜索结果 <span id="search-query" class="muted"></span></h2>
+      <div id="search-list" class="event-list"></div>
+    </section>
+
+    <section id="timeseries-section">
+      <h2>近 7 日情绪</h2>
+      <div id="timeseries" class="bars"></div>
+    </section>
+
+    <section id="factors-section">
+      <h2>因子分解</h2>
+      <div id="factors" class="factors"></div>
+    </section>
+
+    <section>
+      <h2>事件时间线</h2>
+      <div id="timeline" class="event-list"></div>
+      <div class="pager">
+        <button id="load-more" hidden>加载更多</button>
+        <span id="timeline-status" class="muted"></span>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

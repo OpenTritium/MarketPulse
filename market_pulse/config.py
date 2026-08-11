@@ -34,14 +34,14 @@ def build_config(
     turso_url: str = "file:data/market.db",
     llm_base_url: str = "https://opencode.ai/zen/go/v1",
     llm_model: str = "deepseek-v4-flash",
-    wigolo_url: str = "http://127.0.0.1:3333/mcp",
+    wigolo_url: str | None = None,
 ) -> Config:
-    """构造配置：向量模型固定，其他非敏感字段可由调用方覆盖。"""
+    """构造配置：向量模型固定，其他非敏感字段由 CLI 覆盖（密钥走环境变量）。"""
     return Config(
         turso_url=turso_url,
         llm_base_url=llm_base_url,
         llm_model=llm_model,
-        wigolo_url=wigolo_url,
+        wigolo_url=wigolo_url or "http://127.0.0.1:3333/mcp",
         llm_api_key=_secret("LLM_API_KEY"),
         wigolo_token=_secret("WIGOLO_TOKEN"),
     )

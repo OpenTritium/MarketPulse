@@ -45,6 +45,9 @@ def collect(
     llm_model: str = typer.Option(
         "deepseek-v4-flash", "--llm-model", help="LLM 模型名"
     ),
+    wigolo_url: str | None = typer.Option(
+        None, "--wigolo-url", help="wigolo MCP 监听地址（默认 127.0.0.1:3333/mcp）"
+    ),
 ) -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -54,6 +57,7 @@ def collect(
         turso_url=db,
         llm_base_url=llm_base_url,
         llm_model=llm_model,
+        wigolo_url=wigolo_url,
     )
     selected = _filter_sources(sources) if sources else None
     stats = asyncio.run(run_collect(cfg, selected))

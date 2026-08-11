@@ -10,3 +10,6 @@ data/
 models/
 .pi-subagents/
 .ruff_cache/
+# bun web 前端
+web/dist/
+web/node_modules/

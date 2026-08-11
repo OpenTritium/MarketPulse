@@ -108,6 +108,7 @@ def test_error_envelope_404_and_422(tmp_path: Path) -> None:
     )
     with TestClient(application) as client:
         not_found = client.get("/events/nope")
+        unmatched = client.get("/whatever")
         validation = client.get("/timeline", params={"limit": 0})
         blank_query = client.get("/search", params={"q": "   "})
 
@@ -117,6 +118,12 @@ def test_error_envelope_404_and_422(tmp_path: Path) -> None:
     assert error["message"] == "事件不存在"
     assert error["request_id"]
     assert not_found.headers["X-Request-Id"] == error["request_id"]
+
+    # 未匹配路由的 404 也必须走统一信封（starlette 类 HTTPException）
+    assert unmatched.status_code == 404
+    error = unmatched.json()["error"]
+    assert error["type"] == "not_found_error"
+    assert error["message"] == "Not Found"
 
     assert validation.status_code == 422
     error = validation.json()["error"]

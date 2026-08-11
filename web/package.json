@@ -1,0 +1,17 @@
+{
+  "name": "market-pulse-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint server.ts public/app.js",
+    "build": "bun build --compile --minify --outfile dist/market-pulse-web server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxlint": "^1.78.0",
+    "typescript": "^7.0.2"
+  }
+}

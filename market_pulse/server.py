@@ -8,6 +8,7 @@ import typer
 import uvicorn
 
 from .api import create_app
+from .config import build_config
 from .scheduler import parse_duration_seconds
 
 
@@ -31,6 +32,9 @@ def main(
     ),
     host: str = typer.Option("0.0.0.0", "--host", help="HTTP 监听地址"),
     port: int = typer.Option(8000, "--port", min=1, max=65535, help="HTTP 端口"),
+    wigolo_url: str | None = typer.Option(
+        None, "--wigolo-url", help="wigolo MCP 监听地址（默认 127.0.0.1:3333/mcp）"
+    ),
 ) -> None:
     """启动单 worker API 与同进程采集调度器。"""
     interval_seconds = _parse_duration_option(
@@ -45,6 +49,7 @@ def main(
     )
     uvicorn.run(
         create_app(
+            cfg=build_config(wigolo_url=wigolo_url),
             collect_interval_seconds=interval_seconds,
             collect_delay_seconds=delay_seconds,
         ),

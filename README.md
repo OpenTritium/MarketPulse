@@ -1,6 +1,6 @@
 # Market Pulse · 市场情绪采集服务
 
-通过 wigolo MCP 采集 A 股/中国宏观新闻，LLM 生成摘要与情绪分，本地向量模型入库 libSQL，提供 FastAPI 查询接口。API 与后台采集调度器同进程运行，一个容器全包。
+通过 wigolo MCP 采集 A 股/中国宏观新闻，LLM 生成摘要与情绪分，本地向量模型入库 libSQL，提供 FastAPI 查询接口。API 与后台采集调度器同进程运行，一个容器全包；`web/` 是 Bun 前端（canary 编译为单二进制，监听 8443 反代后端并托管页面）。
 
 ## 部署
 
@@ -31,6 +31,7 @@ docker logs -f market-pulse
 | --- | --- | --- |
 | `--collect-interval` | `30m` | 采集轮次间隔，必须 > 0 |
 | `--collect-delay` | `30s` | 启动后首轮延迟；`0s` 立即采集 |
+| `--wigolo-url` | `127.0.0.1:3333/mcp` | wigolo MCP 监听地址（跑在其他主机/端口时改这里） |
 
 > 固定单 worker：增加 worker 会启动重复的后台采集器。首轮启动会自动下载 embedding 模型（约 100MB，需要代理时配置 `HTTPS_PROXY`）。
 
@@ -53,6 +54,23 @@ curl 'http://127.0.0.1:8000/timeline?limit=5'
 curl 'http://127.0.0.1:8000/sentiment/overview'
 curl 'http://127.0.0.1:8000/search?q=央行+降准'
 ```
+
+## 前端（web/）
+
+Bun 单页仪表盘：监听 8443，`/api/*` 反代到后端，其余路径托管静态页面（canary 编译时内嵌进二进制）。
+
+```bash
+cd web
+bun run dev        # 本地开发（默认 8443）
+docker build -t market-pulse-web .   # 生产：oven/bun:canary 编译单二进制
+
+docker run -d --name market-pulse-web \
+  --network host \
+  -e BACKEND_URL=http://127.0.0.1:8000 \
+  market-pulse-web
+```
+
+环境变量：`PORT`（默认 8443）、`BACKEND_URL`（默认 `http://127.0.0.1:8000`）。质量检查：`bun run typecheck`（tsc）、`bun run lint`（oxlint）。
 
 ## 常见问题
 
