@@ -145,7 +145,9 @@ def _register_error_handlers(application: FastAPI) -> None:
 
     def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         status_code = exc.status_code if isinstance(exc, HTTPException) else 500
-        message = str(exc.detail) if isinstance(exc, HTTPException) else "服务器内部错误"
+        message = (
+            str(exc.detail) if isinstance(exc, HTTPException) else "服务器内部错误"
+        )
         return JSONResponse(
             status_code=status_code,
             content=_error_body(
@@ -156,9 +158,7 @@ def _register_error_handlers(application: FastAPI) -> None:
             headers={"X-Request-Id": _request_id(request)},
         )
 
-    def validation_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         errors = exc.errors() if isinstance(exc, RequestValidationError) else []
         first = errors[0] if errors else {}
         param = ".".join(str(part) for part in first.get("loc", [])[1:]) or None
@@ -335,14 +335,10 @@ def timeseries(
                 else None
             ),
             "count": bucket["count"],
-            "positive_ratio": round(
-                bucket["pos"] / bucket["with_sentiment"], 3
-            )
+            "positive_ratio": round(bucket["pos"] / bucket["with_sentiment"], 3)
             if bucket["with_sentiment"]
             else 0.0,
-            "negative_ratio": round(
-                bucket["neg"] / bucket["with_sentiment"], 3
-            )
+            "negative_ratio": round(bucket["neg"] / bucket["with_sentiment"], 3)
             if bucket["with_sentiment"]
             else 0.0,
         }

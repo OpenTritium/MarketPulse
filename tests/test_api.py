@@ -11,9 +11,7 @@ from market_pulse.config import build_config
 from market_pulse.db import Store
 
 
-def _insert_event(
-    store: Store, event_id: str, title: str, first_seen_at: str
-) -> None:
+def _insert_event(store: Store, event_id: str, title: str, first_seen_at: str) -> None:
     store.conn.execute(
         """INSERT INTO events (id, title, first_seen_at, last_seen_at, report_count)
            VALUES (?, ?, ?, ?, 1)""",
