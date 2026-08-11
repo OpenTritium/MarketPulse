@@ -102,7 +102,11 @@ def test_timeline_returns_total_across_pages(store: Store) -> None:
     with store.batch():
         for index in range(3):
             _, _ = store.merge_or_create(_report(index), _vector(index))
-    total, events = store.timeline(limit=1, offset=1)
+    # 与 timeline 相同的排序（first_seen_at DESC, id DESC）取第二页游标：中间那条
+    cursor = store.conn.execute(
+        "SELECT id FROM events ORDER BY first_seen_at DESC, id DESC LIMIT 1 OFFSET 1"
+    ).fetchone()[0]
+    total, events = store.timeline(limit=1, starting_after=cursor)
     assert total == 3
     assert len(events) == 1
 

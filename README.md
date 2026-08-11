@@ -39,12 +39,14 @@ docker logs -f market-pulse
 | 接口 | 说明 |
 | --- | --- |
 | `GET /health` | 健康检查 |
-| `GET /timeline?limit=50&offset=0` | 事件时间线（倒序，带来源数组） |
+| `GET /timeline?limit=50&starting_after={event_id}` | 事件时间线（倒序，游标分页：响应含 `has_more` / `starting_after`） |
 | `GET /events/{event_id}` | 事件详情 + 多来源报道列表 |
 | `GET /sentiment/overview` | 情绪总览：24h 均值、7 日均值与趋势差 |
 | `GET /sentiment/timeseries?window=day&hours=72` | 情绪时序：均值/计数/正负占比，按小时或天分桶 |
 | `GET /sentiment/factors?hours=72` | 因子分解：各因子平均情绪与覆盖率 |
 | `GET /search?q=降息&k=10` | 语义检索：按事件摘要向量近邻 |
+
+错误统一为 `{error: {type, message, param, request_id}}`（`type` 如 `not_found_error` / `invalid_request_error`），每条响应带 `X-Request-Id` 头。
 
 ```bash
 curl 'http://127.0.0.1:8000/timeline?limit=5'

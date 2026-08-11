@@ -389,25 +389,53 @@ class Store:
     # ---- 查询 ----
 
     def timeline(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, starting_after: str | None = None
     ) -> tuple[int, list[dict[str, Any]]]:
-        """时间线：事件按出现时间倒序，带来源数组和总记录数。"""
+        """时间线：事件按出现时间倒序，带来源数组和总记录数。
+
+        返回 `(total, rows)`，rows 最多 `limit + 1` 条（调用方据此判断
+        has_more）；`starting_after` 为上一页最后一条的事件 ID，基于
+        (first_seen_at, id) 复合游标，翻页期间插入新事件也不会重复或跳条。
+        """
         try:
             total_row = self.conn.execute("SELECT COUNT(*) FROM events").fetchone()
             total = int(total_row[0]) if total_row else 0
         except Exception as exc:
             raise RuntimeError("读取事件总数失败") from exc
-        rows = self.conn.execute(
-            """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
-                      e.factors, e.related_symbols, e.category,
-                      e.first_seen_at, e.last_seen_at, e.report_count,
-                      (SELECT GROUP_CONCAT(r.source, ',') FROM reports r
-                       WHERE r.event_id = e.id) AS sources
-               FROM events e
-               ORDER BY e.first_seen_at DESC
-               LIMIT ? OFFSET ?""",
-            (limit, offset),
-        ).fetchall()
+        if starting_after is not None:
+            cursor = self.conn.execute(
+                "SELECT first_seen_at FROM events WHERE id = ?", (starting_after,)
+            ).fetchone()
+            if cursor is None:
+                raise ValueError("游标不存在")
+            cursor_at = cursor[0]
+        else:
+            cursor_at = None
+        if cursor_at is None:
+            rows = self.conn.execute(
+                """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
+                          e.factors, e.related_symbols, e.category,
+                          e.first_seen_at, e.last_seen_at, e.report_count,
+                          (SELECT GROUP_CONCAT(r.source, ',') FROM reports r
+                           WHERE r.event_id = e.id) AS sources
+                   FROM events e
+                   ORDER BY e.first_seen_at DESC, e.id DESC
+                   LIMIT ?""",
+                (limit + 1,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
+                          e.factors, e.related_symbols, e.category,
+                          e.first_seen_at, e.last_seen_at, e.report_count,
+                          (SELECT GROUP_CONCAT(r.source, ',') FROM reports r
+                           WHERE r.event_id = e.id) AS sources
+                   FROM events e
+                   WHERE e.first_seen_at < ? OR (e.first_seen_at = ? AND e.id < ?)
+                   ORDER BY e.first_seen_at DESC, e.id DESC
+                   LIMIT ?""",
+                (cursor_at, cursor_at, starting_after, limit + 1),
+            ).fetchall()
         return total, _rows_to_dicts(
             [
                 "id",

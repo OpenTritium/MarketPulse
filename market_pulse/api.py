@@ -8,14 +8,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
+import uuid
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, cast, override
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from market_pulse.config import Config, build_config
 from market_pulse.db import Store
@@ -27,6 +33,8 @@ from market_pulse.scheduler import (
     run_scheduler,
 )
 from market_pulse.timestamps import format_utc_timestamp
+
+_log = logging.getLogger("api")
 
 
 @dataclass(frozen=True)
@@ -91,7 +99,7 @@ def create_app(
 
     application = FastAPI(
         title="Market Pulse API",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=_lifespan_factory(
             config,
             collect_interval_seconds=collect_interval_seconds,
@@ -99,7 +107,112 @@ def create_app(
         ),
     )
     application.include_router(router)
+    _register_error_handlers(application)
+    _register_request_id_middleware(application)
     return application
+
+
+_STATUS_TO_ERROR_TYPE = {
+    400: "invalid_request_error",
+    401: "authentication_error",
+    403: "permission_error",
+    404: "not_found_error",
+    409: "conflict_error",
+    422: "invalid_request_error",
+    429: "rate_limit_error",
+}
+
+
+def _error_body(
+    *, type_: str, message: str, request_id: str, param: str | None = None
+) -> dict[str, Any]:
+    return {
+        "error": {
+            "type": type_,
+            "message": message,
+            "param": param,
+            "request_id": request_id,
+        }
+    }
+
+
+def _request_id(request: Request) -> str:
+    return cast(str, getattr(request.state, "request_id", "")) or ""
+
+
+def _register_error_handlers(application: FastAPI) -> None:
+    """统一错误信封：{error: {type, message, param, request_id}}。"""
+
+    def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        status_code = exc.status_code if isinstance(exc, HTTPException) else 500
+        message = str(exc.detail) if isinstance(exc, HTTPException) else "服务器内部错误"
+        return JSONResponse(
+            status_code=status_code,
+            content=_error_body(
+                type_=_STATUS_TO_ERROR_TYPE.get(status_code, "api_error"),
+                message=message,
+                request_id=_request_id(request),
+            ),
+            headers={"X-Request-Id": _request_id(request)},
+        )
+
+    def validation_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        errors = exc.errors() if isinstance(exc, RequestValidationError) else []
+        first = errors[0] if errors else {}
+        param = ".".join(str(part) for part in first.get("loc", [])[1:]) or None
+        message = "；".join(
+            f"{'.'.join(str(p) for p in e.get('loc', [])[1:]) or e.get('loc', [''])[0]}: {e.get('msg', '')}"
+            for e in errors[:5]
+        )
+        return JSONResponse(
+            status_code=422,
+            content=_error_body(
+                type_="invalid_request_error",
+                message=message,
+                param=param,
+                request_id=_request_id(request),
+            ),
+            headers={"X-Request-Id": _request_id(request)},
+        )
+
+    def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = _request_id(request)
+        _log.exception("未处理异常 request_id=%s", request_id, exc_info=exc)
+        return JSONResponse(
+            status_code=500,
+            content=_error_body(
+                type_="api_error",
+                message="服务器内部错误",
+                request_id=request_id,
+            ),
+            headers={"X-Request-Id": request_id},
+        )
+
+    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(
+        RequestValidationError, validation_exception_handler
+    )
+    application.add_exception_handler(Exception, unhandled_exception_handler)
+
+
+class _RequestIdMiddleware(BaseHTTPMiddleware):
+    """透传或生成 X-Request-Id，并写入响应头供排障关联。"""
+
+    @override
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        return response
+
+
+def _register_request_id_middleware(application: FastAPI) -> None:
+    application.add_middleware(_RequestIdMiddleware)
 
 
 def _rows(store: Store, since: datetime) -> list[dict[str, Any]]:
@@ -127,11 +240,24 @@ def health() -> dict[str, str]:
 def timeline(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    starting_after: str | None = Query(
+        None, description="上一页最后一条事件的 ID（游标分页）"
+    ),
 ) -> dict[str, Any]:
     """事件时间线：按出现时间倒序，每条带来源数组。"""
-    total, rows = _runtime(request).store.timeline(limit, offset)
-    return {"total": total, "events": rows}
+    try:
+        total, rows = _runtime(request).store.timeline(limit, starting_after)
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail="starting_after 指向的事件不存在"
+        ) from None
+    has_more = len(rows) > limit
+    return {
+        "total": total,
+        "events": rows[:limit],
+        "has_more": has_more,
+        "starting_after": rows[limit - 1]["id"] if has_more else None,
+    }
 
 
 @router.get("/events/{event_id}")
@@ -187,7 +313,7 @@ def timeseries(
     """情绪时间序列：均值、计数和正负占比，按 UTC hour/day 分桶。"""
     since = datetime.now(UTC) - timedelta(hours=hours)
     buckets: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"count": 0, "sum": 0.0, "pos": 0, "neg": 0}
+        lambda: {"count": 0, "sum": 0.0, "with_sentiment": 0, "pos": 0, "neg": 0}
     )
     for row in _rows(_runtime(request).store, since):
         key = _bucket_key(row["at"], window)
@@ -195,6 +321,7 @@ def timeseries(
         bucket["count"] += 1
         if row["sentiment"] is not None:
             bucket["sum"] += row["sentiment"]
+            bucket["with_sentiment"] += 1
             if row["sentiment"] > 0.05:
                 bucket["pos"] += 1
             elif row["sentiment"] < -0.05:
@@ -202,10 +329,22 @@ def timeseries(
     series = [
         {
             "bucket": key,
-            "avg_sentiment": round(bucket["sum"] / bucket["count"], 3),
+            "avg_sentiment": (
+                round(bucket["sum"] / bucket["with_sentiment"], 3)
+                if bucket["with_sentiment"]
+                else None
+            ),
             "count": bucket["count"],
-            "positive_ratio": round(bucket["pos"] / bucket["count"], 3),
-            "negative_ratio": round(bucket["neg"] / bucket["count"], 3),
+            "positive_ratio": round(
+                bucket["pos"] / bucket["with_sentiment"], 3
+            )
+            if bucket["with_sentiment"]
+            else 0.0,
+            "negative_ratio": round(
+                bucket["neg"] / bucket["with_sentiment"], 3
+            )
+            if bucket["with_sentiment"]
+            else 0.0,
         }
         for key, bucket in sorted(buckets.items())
     ]
