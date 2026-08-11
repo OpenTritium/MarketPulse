@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && find /app/.venv/lib/python3.13/site-packages \
       -type d \( -name test -o -name tests \) -prune -exec rm -rf {} +
 
-FROM ghcr.io/astral-sh/uv:0.12.3-python3.13-trixie-slim
+FROM python:3.13-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu libgomp1 \
