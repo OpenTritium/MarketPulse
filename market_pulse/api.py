@@ -463,9 +463,7 @@ def search(
     runtime = _runtime(request)
     return {
         "query": q,
-        "results": runtime.store.search_similar(
-            q, runtime.embedder.embed(q), k=k
-        ),
+        "results": runtime.store.search_similar(q, runtime.embedder.embed(q), k=k),
     }
 
 
@@ -477,17 +475,22 @@ async def quote_kline(
         description="标的代码（带交易所后缀），如 000001.SZ / 600519.SH",
     ),
     days: int = Query(120, ge=10, le=500),
+    granularity: str = Query("minute", pattern="^(minute|day)$"),
 ) -> dict[str, Any]:
-    """标的日线 K 线（zzshare 行情源代理）。"""
+    """标的 K 线（zzshare 行情源代理）：minute=当日 1min 分时，day=日线。"""
     runtime = _runtime(request)
     if not runtime.cfg.zzshare_token:
         raise HTTPException(status_code=503, detail="行情服务未配置（ZZSHARE_TOKEN）")
+    code = ts_code.upper()
     async with QuoteClient(runtime.cfg) as client:
         try:
-            kline = await client.kline(ts_code.upper(), days)
+            if granularity == "minute":
+                kline = await client.kline_minute(code)
+            else:
+                kline = await client.kline(code, days)
         except (httpx.HTTPError, QuoteError) as exc:
             raise HTTPException(status_code=502, detail=f"行情源错误: {exc}") from exc
-    return {"ts_code": ts_code.upper(), "kline": kline}
+    return {"ts_code": code, "granularity": granularity, "kline": kline}
 
 
 app = create_app()

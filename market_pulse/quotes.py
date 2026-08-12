@@ -156,3 +156,61 @@ class QuoteClient:
             for item in items
         ]
         return sorted(kline, key=lambda k: k["date"])
+
+    async def kline_minute(
+        self, ts_code: str, limit: int = 240
+    ) -> list[dict[str, Any]]:
+        """当日分钟 K 线（1min，9:31-15:00 共 240 根，北京时区）。
+
+        trade_time 为北京时间 YYYYMMDDHHMM，转换为 UTC 秒时间戳
+        （lightweight-charts 的 UTCTimestamp 语义），date 字段即秒整数。
+        """
+        from datetime import UTC, datetime, timedelta
+
+        try:
+            limit = max(1, min(int(limit), 2400))
+        except (TypeError, ValueError):
+            limit = 240
+        response = await self._client.get(
+            f"{ZZSHARE_BASE}/v3/market/kline/minute/{ts_code}",
+            params={"limit": limit},
+            headers=self._headers,
+        )
+        _ = response.raise_for_status()
+        body = response.json()
+        if body.get("code") != 200:
+            raise QuoteError(
+                f"zzshare 返回异常: {body.get('message', body.get('code'))}"
+            )
+        data = body.get("data") or {}
+        items = data.get("list") or []
+        utc_offset = timedelta(hours=8)
+
+        def _num(value: Any, default: float = 0.0) -> float:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return default
+            return number if number == number else default
+
+        kline = []
+        for item in items:
+            raw = str(item.get("trade_time") or "")
+            try:
+                when = datetime.strptime(raw, "%Y%m%d%H%M").replace(
+                    tzinfo=UTC
+                ) - utc_offset
+                ts = int(when.timestamp())
+            except (ValueError, OverflowError, OSError):
+                continue
+            kline.append(
+                {
+                    "date": ts,
+                    "open": _num(item.get("open")),
+                    "high": _num(item.get("high")),
+                    "low": _num(item.get("low")),
+                    "close": _num(item.get("close")),
+                    "volume": _num(item.get("vol")),
+                }
+            )
+        return sorted(kline, key=lambda k: k["date"])

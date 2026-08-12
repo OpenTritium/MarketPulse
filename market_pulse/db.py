@@ -370,7 +370,14 @@ class Store:
         ).fetchone()
         if not row:
             return
-        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum, _old_published_at = row
+        (
+            old_sentiment,
+            old_impact,
+            old_factors_json,
+            report_count,
+            old_impact_sum,
+            _old_published_at,
+        ) = row
         try:
             count = int(report_count or 1)
         except (TypeError, ValueError):
@@ -465,7 +472,8 @@ class Store:
             raise RuntimeError("读取事件总数失败") from exc
         if starting_after is not None:
             cursor = self.conn.execute(
-                "SELECT COALESCE(published_at, first_seen_at) FROM events WHERE id = ?", (starting_after,)
+                "SELECT COALESCE(published_at, first_seen_at) FROM events WHERE id = ?",
+                (starting_after,),
             ).fetchone()
             if cursor is None:
                 raise ValueError("游标不存在")
@@ -607,9 +615,7 @@ class Store:
             raise ValueError(
                 f"embedding 维度错误：期望 {EMBEDDING_DIM}，实际 {len(embedding)}"
             )
-        esc = (
-            query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        esc = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{esc}%"
         # 关键词通道：标题命中优先于仅摘要命中，同组内新事件在前
         kw_rows = self.conn.execute(

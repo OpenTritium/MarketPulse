@@ -487,6 +487,28 @@ main {
   color: var(--text);
 }
 
+.kline-periods {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.kline-period {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.kline-period.active {
+  background: #26313c;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .kline-box {
   margin-top: 10px;
   border: 1px solid var(--border);

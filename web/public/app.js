@@ -368,13 +368,33 @@ function renderKlineSection(container, symbols, event) {
   const block = el("div", "detail-block");
   block.append(el("strong", null, "行情"));
   const tabs = el("div", "kline-tabs");
+  // 周期切换：分时（当日 1min）优先——观察新闻后的即时走势
+  const periods = [
+    ["minute", "分时"],
+    ["day", "日线"],
+  ];
+  const periodBtns = el("div", "kline-periods");
+  let activePeriod = "minute";
+  for (const [value, label] of periods) {
+    const btn = el("button", `kline-period ${value === activePeriod ? "active" : ""}`, label);
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      if (activePeriod === value) return;
+      activePeriod = value;
+      for (const b of periodBtns.children) b.classList.toggle("active", b === btn);
+      if (current) loadKline(current);
+    });
+    periodBtns.append(btn);
+  }
   const chartBox = el("div", "kline-box");
-  block.append(tabs, chartBox);
+  block.append(tabs, periodBtns, chartBox);
   container.append(block);
 
   // 事件发生时刻（报道发布时间优先，采集时间兜底）→ K 线标记
   const eventTime = event?.published_at || event?.first_seen_at || null;
   const markerDate = eventTime ? eventTime.slice(0, 10) : null;
+  // 事件时刻对齐到分钟（匹配分时 bar 的 trade_time 粒度），UTC 秒
+  const markerMinuteTs = eventTime ? Math.floor(Date.parse(eventTime) / 60000) * 60 : null;
 
   let current = null;
 
@@ -384,7 +404,13 @@ function renderKlineSection(container, symbols, event) {
       activeKlineChart = null;
     }
     chartBox.replaceChildren(el("div", "muted", `加载 ${symbol.name} K 线…`));
-    api(`/quote/kline?ts_code=${encodeURIComponent(symbol.ts_code)}&days=120`)
+    const granularity = activePeriod;
+    const params = new URLSearchParams({
+      ts_code: symbol.ts_code,
+      granularity,
+    });
+    if (granularity === "day") params.set("days", "120");
+    api(`/quote/kline?${params}`)
       .then((data) => {
         chartBox.replaceChildren();
         if (!data.kline?.length) {
@@ -413,9 +439,13 @@ function renderKlineSection(container, symbols, event) {
           wickUpColor: "#e5484d",
           wickDownColor: "#46a758",
         });
+        const fmtTime = (k) =>
+          granularity === "minute"
+            ? k.date // 后端已转 UTC 秒（UTCTimestamp）
+            : k.date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
         series.setData(
           data.kline.map((k) => ({
-            time: k.date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
+            time: fmtTime(k),
             open: k.open,
             high: k.high,
             low: k.low,
@@ -423,19 +453,24 @@ function renderKlineSection(container, symbols, event) {
           })),
         );
         activeKlineChart.timeScale().fitContent();
-        // 事件发生时刻：蓝色竖线。事件日期超出 K 线范围时落在最新一根
+        // 事件发生时刻：蓝色箭头，随图表缩放/平移。
+        // 分时：事件时刻对齐分钟（clamp 到数据范围）；日线：事件日期（超出落最新）
         if (markerDate) {
-          const firstDate = data.kline[0].date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
-          const lastDate = data.kline[data.kline.length - 1].date.replace(
-            /(\d{4})(\d{2})(\d{2})/,
-            "$1-$2-$3",
-          );
-          // 事件日期超出 K 线范围时落在最新一根；蓝色箭头随图表缩放/平移
-          const lineDate = markerDate >= lastDate ? lastDate : markerDate;
-          if (lineDate >= firstDate) {
+          const first = data.kline[0].date;
+          const last = data.kline[data.kline.length - 1].date;
+          const useMinute = granularity === "minute" && markerMinuteTs != null;
+          const markerTime = useMinute
+            ? Math.min(Math.max(markerMinuteTs, first), last)
+            : markerDate >= last
+              ? last
+              : markerDate;
+          const inRange = useMinute
+            ? markerTime >= first && markerTime <= last
+            : markerTime >= first && markerTime <= last;
+          if (inRange) {
             LightweightCharts.createSeriesMarkers(series, [
               {
-                time: lineDate,
+                time: markerTime,
                 position: "aboveBar",
                 color: "#4da3ff",
                 shape: "arrowUp",
