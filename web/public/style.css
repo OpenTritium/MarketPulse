@@ -188,8 +188,13 @@ main {
   margin-top: 4px;
 }
 
+/* 情绪数字与事件数统一字号（.sent 是 span，需继承 value 尺寸） */
+.card .value.sent {
+  font-size: 22px;
+}
+
 .sent {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .sent.up {
@@ -263,19 +268,20 @@ main {
   background: #141b23;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 12px 16px;
 }
 
 .factor .row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: baseline;
+  gap: 10px;
 }
 
 .factor .desc {
   color: var(--muted);
   font-size: 12px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 /* 情绪条：正值红、负值绿，宽度按 |值| */
