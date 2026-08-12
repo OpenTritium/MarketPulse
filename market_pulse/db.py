@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS reports (
   collected_at TEXT NOT NULL,
   raw_text TEXT,
   content_hash TEXT NOT NULL,
+  sentiment REAL,
+  impact REAL,
+  factors TEXT,
   UNIQUE (url, content_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_reports_event ON reports(event_id);
@@ -145,6 +148,7 @@ class Store:
             self.conn.executescript(_SCHEMA)
             self._validate_embedding_schema()
             self._migrate_impact_sum()
+            self._migrate_report_scores()
             self._migrate_timestamps()
             self.conn.commit()
         except Exception as exc:
@@ -171,6 +175,20 @@ class Store:
         self.conn.execute(
             "ALTER TABLE events ADD COLUMN impact_sum REAL NOT NULL DEFAULT 0"
         )
+
+    def _migrate_report_scores(self) -> None:
+        """旧库补齐 reports 的报道级分数列（sentiment/impact/factors）。"""
+        columns = self.conn.execute("PRAGMA table_info(reports)").fetchall()
+        names = {row[1] for row in columns}
+        for name, ddl in (
+            ("sentiment", "REAL"),
+            ("impact", "REAL"),
+            ("factors", "TEXT"),
+        ):
+            if name not in names:
+                self.conn.execute(
+                    f"ALTER TABLE reports ADD COLUMN {name} {ddl}"
+                )
 
     def _migrate_timestamps(self) -> None:
         """把历史 SQLite UTC 文本升级为统一 RFC 3339 UTC 格式。"""
@@ -307,8 +325,9 @@ class Store:
     ) -> None:
         self.conn.execute(
             """INSERT INTO reports
-               (id, event_id, url, source, title, published_at, collected_at, raw_text, content_hash)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, event_id, url, source, title, published_at, collected_at,
+                raw_text, content_hash, sentiment, impact, factors)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(uuid7()),
                 event_id,
@@ -319,6 +338,11 @@ class Store:
                 collected_at,
                 zlib.compress(report.raw_text[:8000].encode()),  # 压缩存 BLOB，省 ~60%
                 content_hash,
+                report.sentiment,
+                report.impact,
+                json.dumps(report.factors, ensure_ascii=False)
+                if report.factors
+                else None,
             ),
         )
 
@@ -349,9 +373,9 @@ class Store:
         def _weighted(old: float | None, new: float) -> float:
             """impact 加权；权重和为 0（全部无影响报道）时回退简单平均。"""
             if new_impact_sum > 0:
-                return ((old or 0.0) * (old_impact_sum or 0.0) + new * report_impact) / (
-                    new_impact_sum
-                )
+                return (
+                    (old or 0.0) * (old_impact_sum or 0.0) + new * report_impact
+                ) / (new_impact_sum)
             return ((old or 0.0) * count + new) / (count + 1)
 
         new_sentiment = _weighted(old_sentiment, report.sentiment or 0.0)

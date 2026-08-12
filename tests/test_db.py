@@ -162,7 +162,5 @@ def test_impact_weighted_aggregation(store: Store) -> None:
 
 def test_legacy_events_get_impact_sum_column(store: Store) -> None:
     """旧库启动时自动补 impact_sum 列（PRAGMA 检测 + ALTER）。"""
-    columns = [
-        r[1] for r in store.conn.execute("PRAGMA table_info(events)").fetchall()
-    ]
+    columns = [r[1] for r in store.conn.execute("PRAGMA table_info(events)").fetchall()]
     assert "impact_sum" in columns
