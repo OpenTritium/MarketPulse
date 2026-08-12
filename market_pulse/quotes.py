@@ -115,8 +115,11 @@ class QuoteClient:
         from datetime import UTC, datetime, timedelta
 
         end = datetime.now(UTC).date()
-        days = max(1, min(int(days), 500))
-        start_offset = int(days * 1.6) + 10  # 交易日约 60%，留余量
+        try:
+            days = max(1, min(int(days), 500))
+            start_offset = int(days * 1.6) + 10  # 交易日约 60%，留余量
+        except (TypeError, ValueError):
+            days, start_offset = 120, 202
         start = end - timedelta(days=start_offset)
         response = await self._client.get(
             f"{ZZSHARE_BASE}/v3/market/kline/day/{ts_code}",
@@ -124,7 +127,6 @@ class QuoteClient:
                 "get_type": "range",
                 "start_date": start.strftime("%Y%m%d"),
                 "end_date": end.strftime("%Y%m%d"),
-                "limit": days,
             },
             headers=self._headers,
         )

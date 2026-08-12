@@ -419,19 +419,23 @@ function renderKlineSection(container, symbols, event) {
           })),
         );
         activeKlineChart.timeScale().fitContent();
-        // 事件发生时刻：蓝色竖线（fitContent 布局异步，rAF 后再取坐标）
+        // 事件发生时刻：蓝色竖线。事件日期超出 K 线范围时落在最新一根
         if (markerDate) {
           const firstDate = data.kline[0].date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
-          if (markerDate >= firstDate) {
-            requestAnimationFrame(() => {
-              const x = activeKlineChart.timeScale().timeToCoordinate(markerDate);
-              console.log("[kline-debug]", "markerDate=", markerDate, "x=", x);
+          const lastDate = data.kline[data.kline.length - 1].date.replace(
+            /(\d{4})(\d{2})(\d{2})/,
+            "$1-$2-$3",
+          );
+          const lineDate = markerDate >= lastDate ? lastDate : markerDate;
+          if (lineDate >= firstDate) {
+            setTimeout(() => {
+              const x = activeKlineChart.timeScale().timeToCoordinate(lineDate);
               if (x != null) {
                 const line = el("div", "event-line");
                 line.style.left = `${x}px`;
                 chartBox.appendChild(line);
               }
-            });
+            }, 300);
           }
         }
       })
