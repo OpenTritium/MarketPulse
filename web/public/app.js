@@ -496,15 +496,30 @@ function renderKlineSection(container, symbols, event) {
             ? markerTime >= first && markerTime <= last
             : markerTime >= first && markerTime <= last;
           if (inRange) {
-            LightweightCharts.createSeriesMarkers(series, [
-              {
-                time: markerTime,
-                position: "aboveBar",
-                color: "#4da3ff",
-                shape: "arrowUp",
-                text: "事件",
-              },
-            ]);
+            // 方向语义（主流行情软件习惯）：利多红↑、利空绿↓、中性灰圆点
+            const s = event?.sentiment;
+            const marker =
+              s > 0.15
+                ? {
+                    position: "aboveBar",
+                    color: "#e5484d",
+                    shape: "arrowUp",
+                    text: "事件",
+                  }
+                : s < -0.15
+                  ? {
+                      position: "belowBar",
+                      color: "#46a758",
+                      shape: "arrowDown",
+                      text: "事件",
+                    }
+                  : {
+                      position: "aboveBar",
+                      color: "#8b98a5",
+                      shape: "circle",
+                      text: "",
+                    };
+            LightweightCharts.createSeriesMarkers(series, [marker]);
           }
         }
       })
