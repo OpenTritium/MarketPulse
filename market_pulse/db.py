@@ -416,7 +416,7 @@ class Store:
                 """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
                           e.factors, e.related_symbols, e.category,
                           e.first_seen_at, e.last_seen_at, e.report_count,
-                          (SELECT GROUP_CONCAT(DISTINCT r.source, ',') FROM reports r
+                          (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                            WHERE r.event_id = e.id) AS sources
                    FROM events e
                    ORDER BY e.first_seen_at DESC, e.id DESC
@@ -428,7 +428,7 @@ class Store:
                 """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
                           e.factors, e.related_symbols, e.category,
                           e.first_seen_at, e.last_seen_at, e.report_count,
-                          (SELECT GROUP_CONCAT(DISTINCT r.source, ',') FROM reports r
+                          (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                            WHERE r.event_id = e.id) AS sources
                    FROM events e
                    WHERE e.first_seen_at < ? OR (e.first_seen_at = ? AND e.id < ?)
@@ -528,7 +528,7 @@ class Store:
         rows = self.conn.execute(
             """SELECT e.id, e.title, e.summary, e.sentiment, e.first_seen_at,
                       e.last_seen_at, e.factors,
-                      (SELECT GROUP_CONCAT(DISTINCT r.source, ',') FROM reports r
+                      (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                        WHERE r.event_id = e.id) AS sources
                FROM vector_top_k('emb_idx', ?, ?) AS vt
                JOIN event_embeddings ae ON ae.rowid = vt.id
