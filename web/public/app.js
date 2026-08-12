@@ -247,26 +247,22 @@ async function openDetail(eventId) {
       if (withCode.length) {
         renderKlineSection(container, withCode, event, noCode);
       } else {
-        container.append(
+        const hint = el("div", "detail-block");
+        hint.append(
           el(
-            "div",
-            "detail-block",
-            el(
-              "span",
-              "muted",
-              `暂无行情（该事件标的无 A 股代码：${noCode.map((s) => s.name).join("、") || "无"}）`,
-            ),
+            "span",
+            "muted",
+            `暂无行情（该事件标的无 A 股代码：${noCode.map((s) => s.name).join("、") || "无"}）`,
           ),
         );
+        container.append(hint);
       }
     } else {
-      container.append(
-        el(
-          "div",
-          "detail-block",
-          el("span", "muted", "暂无相关标的 · 无行情图表（宏观/政策类事件通常不指向具体标的）"),
-        ),
+      const hint = el("div", "detail-block");
+      hint.append(
+        el("span", "muted", "暂无相关标的 · 无行情图表（宏观/政策类事件通常不指向具体标的）"),
       );
+      container.append(hint);
     }
     if (event.factors && Object.keys(event.factors).length) {
       const block = el("div", "detail-block");
