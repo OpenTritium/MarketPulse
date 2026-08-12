@@ -420,21 +420,13 @@ function renderKlineSection(container, symbols, event) {
         );
         // 事件发生时刻标记：方向/颜色随情绪（红涨绿跌），窗口外忽略
         if (markerDate) {
-          const firstDate = data.kline[0].date.replace(
-            /(\d{4})(\d{2})(\d{2})/,
-            "$1-$2-$3",
-          );
+          const firstDate = data.kline[0].date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
           if (markerDate >= firstDate) {
             const sentiment = event?.sentiment ?? 0;
             const marker = {
               time: markerDate,
               position: "aboveBar",
-              color:
-                sentiment > 0.05
-                  ? "#e5484d"
-                  : sentiment < -0.05
-                    ? "#46a758"
-                    : "#4da3ff",
+              color: sentiment > 0.05 ? "#e5484d" : sentiment < -0.05 ? "#46a758" : "#4da3ff",
               shape: sentiment > 0.05 ? "arrowUp" : sentiment < -0.05 ? "arrowDown" : "circle",
               text: "事件",
             };
