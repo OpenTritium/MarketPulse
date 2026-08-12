@@ -33,8 +33,9 @@ server {
         proxy_connect_timeout 5s;
     }
 
-    # 前端静态文件：默认尝试 index.html
+    # 前端静态文件：默认尝试 index.html；no-cache 避免部署后浏览器用旧资源
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 }
