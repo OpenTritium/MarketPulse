@@ -70,7 +70,7 @@ async def _reanalyze_reports(store: Store) -> list[tuple[str, dict[str, Any]]]:
             )
         )
 
-    _ = await asyncio.gather(*(work(rid, title, raw) for rid, title, raw in rows))
+    _ = await asyncio.gather(*(work(rid, title, raw) for rid, _url, title, raw in rows))
     return results
 
 
