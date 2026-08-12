@@ -60,8 +60,12 @@ function el(tag, className, text) {
   return node;
 }
 
-function sentimentSpan(value) {
-  return el("span", `sent ${sentimentClass(value)}`, sentimentText(value));
+function sentimentSpan(value, extraClass) {
+  return el(
+    "span",
+    `sent ${sentimentClass(value)} ${extraClass ?? ""}`.trim(),
+    sentimentText(value),
+  );
 }
 
 function showError(message) {
@@ -82,10 +86,10 @@ function clearError() {
 async function loadOverview() {
   const data = await api("/sentiment/overview");
   const cards = [
-    ["24h 均值", sentimentSpan(data.latest_24h)],
+    ["24h 均值", sentimentSpan(data.latest_24h, "value")],
     ["24h 事件数", el("div", "value", String(data.count_24h ?? 0))],
-    ["7d 均值", sentimentSpan(data.avg_7d)],
-    ["7d 趋势", sentimentSpan(data.trend_7d)],
+    ["7d 均值", sentimentSpan(data.avg_7d, "value")],
+    ["7d 趋势", sentimentSpan(data.trend_7d, "value")],
   ];
   const container = $("overview");
   container.replaceChildren();
@@ -310,7 +314,7 @@ async function doSearch() {
   } else {
     for (const result of data.results) list.append(renderEventCard(result));
   }
-  $("search-results").hidden = false;
+  switchTo("search");
 }
 
 // ---- Tab 切换 ----
