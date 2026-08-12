@@ -249,7 +249,9 @@ async function openDetail(eventId) {
       const factors = el("div", "factors");
       for (const [name, value] of Object.entries(event.factors)) {
         const f = el("div", "factor");
-        f.append(el("strong", null, name), sentimentSpan(value));
+        const row = el("div", "row");
+        row.append(el("strong", null, name), sentimentSpan(value));
+        f.append(row);
         factors.append(f);
       }
       block.append(factors);
