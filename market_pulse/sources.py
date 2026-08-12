@@ -20,4 +20,7 @@ SOURCES: dict[str, str] = {
     "金十数据": "https://www.jin10.com/",
     "证券时报": "https://www.stcn.com/",
     "智通财经": "https://www.zhitongcaijing.com/",
+    # 国际视角（VPS 大陆网络可达）
+    "汇通网": "https://www.fx678.com/",
+    "新浪美股": "https://finance.sina.com.cn/stock/usstock/",
 }
