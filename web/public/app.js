@@ -213,7 +213,7 @@ async function loadTimeline(reset = false) {
     const list = $("timeline");
     for (const event of data.events) list.append(renderEventCard(event));
     $("timeline-status").textContent = data.total
-      ? `共 ${data.total} 个事件${state.hasMore ? "，继续下拉加载" : ""}`
+      ? `共 ${data.total} 个事件${state.hasMore ? "，点击下方「加载更多」" : ""}`
       : "暂无事件（等待首轮采集）";
     $("load-more").hidden = !state.hasMore;
   } finally {
@@ -233,7 +233,6 @@ async function openDetail(eventId) {
 
     container.append(el("h2", null, event.title));
     const meta = renderEventMeta(event);
-    meta.append(el("span", null, ` · 报道 ${fmtTime(event.published_at || event.first_seen_at)}`));
     container.append(meta);
     if (event.summary) container.append(el("p", "detail-summary", event.summary));
     if (event.related_symbols?.length) {

@@ -499,6 +499,11 @@ main {
 
 /* 事件发生时刻标记由 lightweight-charts marker 渲染（跟随缩放） */
 
+.symbol-tag {
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+}
+
 .symbol-tag:hover {
-  border-color: var(--accent);
+  outline-color: var(--accent);
 }
