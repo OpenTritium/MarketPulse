@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -477,7 +478,17 @@ async def quote_kline(
     days: int = Query(120, ge=1, le=500),
     granularity: str = Query("minute", pattern="^(minute|day)$"),
 ) -> dict[str, Any]:
-    """标的 K 线（zzshare 行情源代理）：minute=当日 1min 分时，day=日线。"""
+    """标的 K 线（zzshare 行情源代理）：minute=当日 1min 分时，day=日线。
+
+    仅支持 A 股（6 位数字 + .SH/.SZ/.BJ）；港股/美股/指数代码 zzshare
+    不支持，直接 422 快速失败（避免把上游 500 透传给前端）。
+    """
+    code = ts_code.upper()
+    if not re.fullmatch(r"\d{6}\.(SH|SZ|BJ)", code):
+        raise HTTPException(
+            status_code=422,
+            detail=f"仅支持 A 股代码（如 000001.SZ），收到 {code}",
+        )
     runtime = _runtime(request)
     if not runtime.cfg.zzshare_token:
         raise HTTPException(status_code=503, detail="行情服务未配置（ZZSHARE_TOKEN）")

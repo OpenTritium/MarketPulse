@@ -242,8 +242,10 @@ async function openDetail(eventId) {
     if (event.related_symbols?.length) {
       const symbols = normalizeSymbols(event.related_symbols);
       // 相关标的并入行情块（标的 tab 已承担切换），无 A 股代码的标的名展示在行情头部
-      const withCode = symbols.filter((s) => s.ts_code);
-      const noCode = symbols.filter((s) => !s.ts_code);
+      // 仅 A 股（6 位数字 + .SH/.SZ/.BJ）渲染 K 线；港股/美股/指数代码 zzshare 不支持
+      const isACode = (s) => /^\d{6}\.(SH|SZ|BJ)$/.test(s.ts_code);
+      const withCode = symbols.filter((s) => s.ts_code && isACode(s));
+      const noCode = symbols.filter((s) => !s.ts_code || !isACode(s));
       if (withCode.length) {
         renderKlineSection(container, withCode, event, noCode);
       } else {
