@@ -419,16 +419,18 @@ function renderKlineSection(container, symbols, event) {
           })),
         );
         activeKlineChart.timeScale().fitContent();
-        // 事件发生时刻：蓝色竖线（timeToCoordinate 定位，窗口外忽略）
+        // 事件发生时刻：蓝色竖线（fitContent 布局异步，rAF 后再取坐标）
         if (markerDate) {
           const firstDate = data.kline[0].date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
           if (markerDate >= firstDate) {
-            const x = activeKlineChart.timeScale().timeToCoordinate(markerDate);
-            if (x != null) {
-              const line = el("div", "event-line");
-              line.style.left = `${x}px`;
-              chartBox.appendChild(line);
-            }
+            requestAnimationFrame(() => {
+              const x = activeKlineChart.timeScale().timeToCoordinate(markerDate);
+              if (x != null) {
+                const line = el("div", "event-line");
+                line.style.left = `${x}px`;
+                chartBox.appendChild(line);
+              }
+            });
           }
         }
       })
