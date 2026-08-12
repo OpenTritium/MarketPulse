@@ -425,6 +425,7 @@ function renderKlineSection(container, symbols, event) {
           if (markerDate >= firstDate) {
             requestAnimationFrame(() => {
               const x = activeKlineChart.timeScale().timeToCoordinate(markerDate);
+              console.log("[kline-debug]", "markerDate=", markerDate, "x=", x);
               if (x != null) {
                 const line = el("div", "event-line");
                 line.style.left = `${x}px`;
