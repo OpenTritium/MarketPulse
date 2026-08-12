@@ -157,9 +157,7 @@ class QuoteClient:
         ]
         return sorted(kline, key=lambda k: k["date"])
 
-    async def kline_minute(
-        self, ts_code: str, days: int = 1
-    ) -> list[dict[str, Any]]:
+    async def kline_minute(self, ts_code: str, days: int = 1) -> list[dict[str, Any]]:
         """最近 N 个交易日的分钟 K 线（1min，9:31-15:00 每天 240 根，北京时区）。
 
         trade_time 为北京时间 YYYYMMDDHHMM，转换为 UTC 秒时间戳
