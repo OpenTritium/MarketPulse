@@ -418,23 +418,19 @@ function renderKlineSection(container, symbols, event) {
             close: k.close,
           })),
         );
-        // 事件发生时刻标记：方向/颜色随情绪（红涨绿跌），窗口外忽略
+        activeKlineChart.timeScale().fitContent();
+        // 事件发生时刻：蓝色竖线（timeToCoordinate 定位，窗口外忽略）
         if (markerDate) {
           const firstDate = data.kline[0].date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
           if (markerDate >= firstDate) {
-            const sentiment = event?.sentiment ?? 0;
-            const marker = {
-              time: markerDate,
-              position: "aboveBar",
-              color: sentiment > 0.05 ? "#e5484d" : sentiment < -0.05 ? "#46a758" : "#4da3ff",
-              shape: sentiment > 0.05 ? "arrowUp" : sentiment < -0.05 ? "arrowDown" : "circle",
-              text: "事件",
-            };
-            // v5 API：LightweightCharts.createSeriesMarkers(series, markers)（模块级，第一参数是 series）
-            LightweightCharts.createSeriesMarkers(series, [marker]);
+            const x = activeKlineChart.timeScale().timeToCoordinate(markerDate);
+            if (x != null) {
+              const line = el("div", "event-line");
+              line.style.left = `${x}px`;
+              chartBox.appendChild(line);
+            }
           }
         }
-        activeKlineChart.timeScale().fitContent();
       })
       .catch((error) => {
         chartBox.replaceChildren(el("div", "muted", `行情加载失败：${error.message}`));
