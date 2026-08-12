@@ -505,20 +505,17 @@ function renderKlineSection(container, symbols, event) {
                     position: "aboveBar",
                     color: "#e5484d",
                     shape: "arrowUp",
-                    text: "事件",
                   }
                 : s < -0.15
                   ? {
                       position: "belowBar",
                       color: "#46a758",
                       shape: "arrowDown",
-                      text: "事件",
                     }
                   : {
                       position: "aboveBar",
                       color: "#8b98a5",
                       shape: "circle",
-                      text: "",
                     }),
             };
             LightweightCharts.createSeriesMarkers(series, [marker]);
