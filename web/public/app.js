@@ -320,6 +320,7 @@ async function doSearch() {
 // ---- Tab 切换 ----
 
 function switchTo(tab) {
+  if (tab !== "search") $("search-input").value = "";
   state.tab = tab;
   $("tab-dashboard").classList.toggle("active", tab === "dashboard");
   $("tab-timeline").classList.toggle("active", tab === "timeline");
