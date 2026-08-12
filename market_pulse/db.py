@@ -120,7 +120,7 @@ class Report:
     sentiment: float | None
     impact: float | None
     factors: dict[str, float] = field(default_factory=dict)
-    related_symbols: list[str] = field(default_factory=list)
+    related_symbols: list[dict[str, str]] = field(default_factory=list)
 
 
 def _ensure_local_dir(url: str) -> None:

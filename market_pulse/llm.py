@@ -19,6 +19,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from .config import Config
 from .factors import factor_descriptions
+from .quotes import QuoteClient
 
 _SYSTEM_PROMPT = """你是专业市场新闻分析助手。你的任务是把新闻文本压缩为结构化情绪数据。
 
@@ -33,7 +34,13 @@ _SYSTEM_PROMPT = """你是专业市场新闻分析助手。你的任务是把新
   仅当新闻涉及政策、资金、宏观经济、行业/公司业绩与经营、监管、
   灾害事故（自然灾害/安全事故/公共卫生事件）、地缘政治、贸易政策时才是 true。
 - factors: 因子 → 情绪分（-1~1）。只填新闻确实涉及的因子，无关的不填
-- related_symbols: 相关标的（股票代码/指数名/商品名/公司名），无则空数组
+- related_symbols: 相关标的数组，每项为对象 {name, ts_code, type}：
+  - name: 标的名（公司名/指数名/商品名）
+  - ts_code: A 股代码（带交易所后缀 .SH/.SZ/.BJ，如 000001.SZ、600519.SH）；
+    指数用指数代码（上证指数 000001.SH、深证成指 399001.SZ、创业板指 399006.SZ、
+    沪深300 000300.SH）；商品/外汇等无 A 股代码时留空字符串
+  - type: 枚举 stock（股票）/ index（指数）/ commodity（商品/其他）
+  最多 5 个；无法确定代码的标的不编造 ts_code，留空
 
 **打分依据约束（必须遵守）**：
 1. sentiment 必须依据新闻中的**事实方向**打分，禁止凭印象或平均主义：
@@ -53,6 +60,14 @@ _SYSTEM_PROMPT = """你是专业市场新闻分析助手。你的任务是把新
 _FACTOR_LIST = " / ".join(f"{k} {v}" for k, v in factor_descriptions().items())
 
 
+class RelatedSymbol(BaseModel):
+    """相关标的：名称 + A 股 ts_code（如 000001.SZ）+ 类型。"""
+
+    name: str = ""
+    ts_code: str = ""  # 股票/指数代码（交易所后缀 .SH/.SZ/.BJ）；商品等无代码留空
+    type: str = "stock"  # stock | index | commodity
+
+
 class AnalysisResult(BaseModel):
     headline: str = ""
     summary: str = ""
@@ -60,7 +75,7 @@ class AnalysisResult(BaseModel):
     impact: float = Field(default=0.0)
     relevant: bool = True
     factors: dict[str, float] = Field(default_factory=dict)
-    related_symbols: list[str] = Field(default_factory=list)
+    related_symbols: list[RelatedSymbol] = Field(default_factory=list)
 
 
 class NewsItem(BaseModel):
@@ -92,15 +107,28 @@ class Analyzer:
             cfg.llm_model,
             provider=OpenAIProvider(base_url=cfg.llm_base_url, api_key=cfg.llm_api_key),
         )
+        self._quotes: QuoteClient | None = None
+
+    def _quote_client(self) -> QuoteClient:
+        """惰性创建行情客户端（仅 analyze 的工具路径使用）。"""
+        if self._quotes is None:
+            self._quotes = QuoteClient(self.cfg)
+        return self._quotes
 
     def _agent(self, output_type: Any, instructions: str, retries: int) -> Agent:
-        """构造单次调用 Agent（共享模型配置）。"""
+        """构造单次调用 Agent（共享模型配置），注册标的代码查询工具。"""
+
+        async def lookup_symbol(name: str) -> str:
+            """按名称查询真实存在的 A 股 ts_code（带交易所后缀，如 000001.SZ）；查不到返回空字符串。"""
+            return await self._quote_client().lookup(name)
+
         return Agent(
             self._model,
             output_type=PromptedOutput(output_type),
             model_settings=self._SETTINGS,
             retries=retries,
             instructions=instructions + "\n只输出 JSON，不要任何其他文字。",
+            tools=[lookup_symbol],
         )
 
     async def analyze(self, title: str, text: str) -> AnalysisResult:
@@ -132,7 +160,7 @@ class Analyzer:
             factors={
                 k: _clamp(v, -1.0, 1.0) for k, v in out.factors.items() if k in known
             },
-            related_symbols=[str(s) for s in out.related_symbols][:10],
+            related_symbols=out.related_symbols[:10],
         )
 
     async def extract_items(

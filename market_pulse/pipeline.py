@@ -218,7 +218,7 @@ class Collector:
                     sentiment=analyzed.analysis.sentiment,
                     impact=analyzed.analysis.impact,
                     factors=analyzed.analysis.factors,
-                    related_symbols=analyzed.analysis.related_symbols,
+                    related_symbols=[s.model_dump() for s in analyzed.analysis.related_symbols],
                 )
                 try:
                     with self.store.savepoint():

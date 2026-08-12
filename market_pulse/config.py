@@ -27,6 +27,7 @@ class Config:
     llm_model: str
     wigolo_url: str
     wigolo_token: str
+    zzshare_token: str
 
 
 def build_config(
@@ -44,6 +45,7 @@ def build_config(
         wigolo_url=wigolo_url or "http://127.0.0.1:3333/mcp",
         llm_api_key=_secret("LLM_API_KEY"),
         wigolo_token=_secret("WIGOLO_TOKEN"),
+        zzshare_token=_secret("ZZSHARE_TOKEN"),
     )
 
 

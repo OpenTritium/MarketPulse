@@ -30,6 +30,7 @@ from market_pulse.config import Config, build_config
 from market_pulse.db import Store
 from market_pulse.embed import Embedder
 from market_pulse.factors import factor_descriptions
+from market_pulse.quotes import QuoteClient, QuoteError
 from market_pulse.scheduler import (
     DEFAULT_COLLECT_DELAY_SECONDS,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
@@ -464,6 +465,27 @@ def search(
         "query": q,
         "results": runtime.store.search_similar(runtime.embedder.embed(q), k=k),
     }
+
+
+@router.get("/quote/kline")
+async def quote_kline(
+    request: Request,
+    ts_code: str = Query(
+        pattern=r"^[0-9A-Z.]{1,12}$",
+        description="标的代码（带交易所后缀），如 000001.SZ / 600519.SH",
+    ),
+    days: int = Query(120, ge=10, le=500),
+) -> dict[str, Any]:
+    """标的日线 K 线（zzshare 行情源代理）。"""
+    runtime = _runtime(request)
+    if not runtime.cfg.zzshare_token:
+        raise HTTPException(status_code=503, detail="行情服务未配置（ZZSHARE_TOKEN）")
+    async with QuoteClient(runtime.cfg) as client:
+        try:
+            kline = await client.kline(ts_code.upper(), days)
+        except (httpx.HTTPError, QuoteError) as exc:
+            raise HTTPException(status_code=502, detail=f"行情源错误: {exc}") from exc
+    return {"ts_code": ts_code.upper(), "kline": kline}
 
 
 app = create_app()
