@@ -529,3 +529,10 @@ main {
 .symbol-tag:hover {
   outline-color: var(--accent);
 }
+
+.kline-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}

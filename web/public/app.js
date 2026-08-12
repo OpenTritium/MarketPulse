@@ -395,7 +395,8 @@ function renderKlineSection(container, symbols, event) {
     periodBtns.append(btn);
   }
   const chartBox = el("div", "kline-box");
-  block.append(tabs, periodBtns, chartBox);
+  const note = el("span", "kline-note", "");
+  block.append(tabs, periodBtns, chartBox, note);
   container.append(block);
 
   // 事件发生时刻（报道发布时间优先，采集时间兜底）→ K 线标记
@@ -468,6 +469,18 @@ function renderKlineSection(container, symbols, event) {
           })),
         );
         activeKlineChart.timeScale().fitContent();
+        // 数据说明：分时显示交易日/收盘状态，日线显示范围
+        if (granularity === "minute") {
+          const lastTs = data.kline[data.kline.length - 1].date;
+          const bj = new Date(lastTs * 1000 + 8 * 3600 * 1000);
+          const dateLabel = `${bj.getUTCMonth() + 1}月${bj.getUTCDate()}日`;
+          const closed = bj.getUTCHours() === 15 && bj.getUTCMinutes() === 0;
+          note.textContent = closed
+            ? `${dateLabel} 全天 · 15:00 收盘`
+            : `${dateLabel} 截至 ${bjMinuteLabel(lastTs)}`;
+        } else {
+          note.textContent = "最近 120 个交易日";
+        }
         // 事件发生时刻：蓝色箭头，随图表缩放/平移。
         // 分时：事件时刻对齐分钟（clamp 到数据范围）；日线：事件日期（超出落最新）
         if (markerDate) {
