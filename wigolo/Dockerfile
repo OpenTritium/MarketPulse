@@ -26,19 +26,39 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/wigolo-preload/browsers
 RUN bunx playwright install chromium \
     && rm -rf /opt/wigolo-preload/browsers/ffmpeg-* 2>/dev/null || true
 
-# 中文 embedding 模型：从 GCS 下载解压 stage（不经 fastembed 运行时下载，
-# bun 下 onnxruntime 兼容性未知；目录名按 wigolo 硬编码的
+# 中文 embedding 模型：用 bun 下载（oven/bun 镜像无 curl），解压 stage
+# （不经 fastembed 运行时下载；目录名按 wigolo 硬编码的
 # fast-bge-small-en-v1.5 改名——原工程同款 trick）
-RUN curl -fsSL -o /tmp/model.tar.gz \
-        https://storage.googleapis.com/qdrant-fastembed/fast-bge-small-zh-v1.5.tar.gz \
+RUN bun -e "await Bun.write('/tmp/model.tar.gz', await (await fetch('https://storage.googleapis.com/qdrant-fastembed/fast-bge-small-zh-v1.5.tar.gz')).arrayBuffer())" \
     && mkdir -p /opt/wigolo-seed/fastembed \
     && tar -xzf /tmp/model.tar.gz -C /tmp \
     && mv /tmp/fast-bge-small-zh-v1.5 /opt/wigolo-seed/fastembed/fast-bge-small-en-v1.5 \
     && rm /tmp/model.tar.gz \
     && ls /opt/wigolo-seed/fastembed/fast-bge-small-en-v1.5
 
-# 清理体积：wigolo 用不到的类型声明/文档
-RUN find /app/node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.map" \) -delete 2>/dev/null || true
+# 清理体积：类型声明/文档/CUDA 原生库/非当前平台二进制（对照原 node 版工程）
+RUN find /app/node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.map" \) -delete 2>/dev/null || true \
+    && rm -rf \
+        /app/node_modules/onnxruntime-node/bin/napi-v3/darwin \
+        /app/node_modules/onnxruntime-node/bin/napi-v3/win32 \
+        /app/node_modules/onnxruntime-node/bin/napi-v3/linux/arm64 \
+        /app/node_modules/onnxruntime-web \
+        /app/node_modules/onnxruntime-node \
+        /app/node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_cuda.so \
+        /app/node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so \
+        /app/node_modules/@napi-rs/canvas-linux-x64-musl \
+        /app/node_modules/@napi-rs/canvas-linux-arm64-gnu \
+        /app/node_modules/@napi-rs/canvas-linux-arm64-musl \
+        /app/node_modules/@napi-rs/keyring-linux-x64-musl \
+        /app/node_modules/@napi-rs/keyring-linux-arm64-gnu \
+        /app/node_modules/@napi-rs/keyring-linux-arm64-musl \
+        /app/node_modules/@img/sharp-linuxmusl-x64 \
+        /app/node_modules/@img/sharp-linuxmusl-arm64 \
+        /app/node_modules/@img/sharp-linux-arm64 \
+        /app/node_modules/@img/sharp-libvips-linuxmusl-x64 \
+        /app/node_modules/@img/sharp-libvips-linuxmusl-arm64 \
+        /app/node_modules/@img/sharp-libvips-linux-arm64 \
+    && find /app/node_modules/wreq-js/rust -type f ! -name 'wreq-js.linux-x64-gnu.node' -delete 2>/dev/null || true
 
 # ---------- Runtime stage ----------
 FROM oven/bun:${BUN_TAG}
