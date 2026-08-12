@@ -241,26 +241,22 @@ async function openDetail(eventId) {
     if (event.summary) container.append(el("p", "detail-summary", event.summary));
     if (event.related_symbols?.length) {
       const symbols = normalizeSymbols(event.related_symbols);
-      const block = el("div", "detail-block");
-      block.append(el("strong", null, "相关标的："));
-      const tags = el("div", "sources");
-      for (const s of symbols) {
-        const tag = el("span", "tag", s.name);
-        if (s.ts_code) {
-          tag.classList.add("symbol-tag");
-          tag.title = s.ts_code;
-        }
-        tags.append(tag);
-      }
-      block.append(tags);
-      container.append(block);
-      // 行情 K 线：因子块之前（有 ts_code 的标的）
+      // 相关标的并入行情块（标的 tab 已承担切换），无 A 股代码的标的名展示在行情头部
       const withCode = symbols.filter((s) => s.ts_code);
+      const noCode = symbols.filter((s) => !s.ts_code);
       if (withCode.length) {
-        renderKlineSection(container, withCode, event);
+        renderKlineSection(container, withCode, event, noCode);
       } else {
         container.append(
-          el("div", "detail-block", el("span", "muted", "暂无行情（该事件标的无 A 股代码）")),
+          el(
+            "div",
+            "detail-block",
+            el(
+              "span",
+              "muted",
+              `暂无行情（该事件标的无 A 股代码：${noCode.map((s) => s.name).join("、") || "无"}）`,
+            ),
+          ),
         );
       }
     } else {
@@ -386,9 +382,14 @@ function bjMinuteLabel(time) {
   return `${hh}:${mm}`;
 }
 
-function renderKlineSection(container, symbols, event) {
+function renderKlineSection(container, symbols, event, noCode = []) {
   const block = el("div", "detail-block");
   block.append(el("strong", null, "行情"));
+  // 无 A 股代码的相关标的（商品/指数等）展示为静态标签
+  if (noCode.length) {
+    const extra = el("span", "kline-extra", `（${noCode.map((s) => s.name).join("、")} 无行情）`);
+    block.lastChild.after(extra);
+  }
   const tabs = el("div", "kline-tabs");
   // 周期切换：分时（当日 1min）优先——观察新闻后的即时走势
   const periods = [
