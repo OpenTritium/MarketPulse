@@ -178,7 +178,7 @@ def test_search_hybrid_combines_keyword_and_vector(store: Store) -> None:
         c.title = "白酒板块午后走强"
         a_id, _ = store.merge_or_create(a, _vector(0))
         b_id, _ = store.merge_or_create(b, _vector(0))
-        store.merge_or_create(c, _vector(1))
+        _ = store.merge_or_create(c, _vector(1))
 
     # 查询 C919：向量通道（全部向量接近 0 的 B 也应召回）
     results = store.search_similar("C919", _vector(0), k=5)
