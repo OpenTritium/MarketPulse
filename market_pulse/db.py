@@ -370,7 +370,7 @@ class Store:
         ).fetchone()
         if not row:
             return
-        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum, old_published_at = row
+        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum, _old_published_at = row
         try:
             count = int(report_count or 1)
         except (TypeError, ValueError):
