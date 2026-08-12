@@ -253,7 +253,7 @@ async function openDetail(eventId) {
       container.append(block);
       // 行情 K 线：因子块之前（有 ts_code 的标的）
       const withCode = symbols.filter((s) => s.ts_code);
-      if (withCode.length) renderKlineSection(container, withCode);
+      if (withCode.length) renderKlineSection(container, withCode, event);
     }
     if (event.factors && Object.keys(event.factors).length) {
       const block = el("div", "detail-block");
@@ -360,13 +360,17 @@ function normalizeSymbols(list) {
 
 let activeKlineChart = null;
 
-function renderKlineSection(container, symbols) {
+function renderKlineSection(container, symbols, event) {
   const block = el("div", "detail-block");
   block.append(el("strong", null, "行情"));
   const tabs = el("div", "kline-tabs");
   const chartBox = el("div", "kline-box");
   block.append(tabs, chartBox);
   container.append(block);
+
+  // 事件发生时刻（报道发布时间优先，采集时间兜底）→ K 线标记
+  const eventTime = event?.published_at || event?.first_seen_at || null;
+  const markerDate = eventTime ? eventTime.slice(0, 10) : null;
 
   let current = null;
 
@@ -414,6 +418,29 @@ function renderKlineSection(container, symbols) {
             close: k.close,
           })),
         );
+        // 事件发生时刻标记：方向/颜色随情绪（红涨绿跌），窗口外忽略
+        if (markerDate) {
+          const firstDate = data.kline[0].date.replace(
+            /(\d{4})(\d{2})(\d{2})/,
+            "$1-$2-$3",
+          );
+          if (markerDate >= firstDate) {
+            const sentiment = event?.sentiment ?? 0;
+            const marker = {
+              time: markerDate,
+              position: "aboveBar",
+              color:
+                sentiment > 0.05
+                  ? "#e5484d"
+                  : sentiment < -0.05
+                    ? "#46a758"
+                    : "#4da3ff",
+              shape: sentiment > 0.05 ? "arrowUp" : sentiment < -0.05 ? "arrowDown" : "circle",
+              text: "事件",
+            };
+            series.setMarkers([marker]);
+          }
+        }
         activeKlineChart.timeScale().fitContent();
       })
       .catch((error) => {
