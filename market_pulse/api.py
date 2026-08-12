@@ -485,7 +485,7 @@ async def quote_kline(
     async with QuoteClient(runtime.cfg) as client:
         try:
             if granularity == "minute":
-                kline = await client.kline_minute(code)
+                kline = await client.kline_minute(code, days=2)
             else:
                 kline = await client.kline(code, days)
         except (httpx.HTTPError, QuoteError) as exc:

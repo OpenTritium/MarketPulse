@@ -158,9 +158,9 @@ class QuoteClient:
         return sorted(kline, key=lambda k: k["date"])
 
     async def kline_minute(
-        self, ts_code: str, limit: int = 240
+        self, ts_code: str, days: int = 1
     ) -> list[dict[str, Any]]:
-        """当日分钟 K 线（1min，9:31-15:00 共 240 根，北京时区）。
+        """最近 N 个交易日的分钟 K 线（1min，9:31-15:00 每天 240 根，北京时区）。
 
         trade_time 为北京时间 YYYYMMDDHHMM，转换为 UTC 秒时间戳
         （lightweight-charts 的 UTCTimestamp 语义），date 字段即秒整数。
@@ -168,9 +168,10 @@ class QuoteClient:
         from datetime import UTC, datetime, timedelta
 
         try:
-            limit = max(1, min(int(limit), 2400))
+            days = max(1, min(int(days), 5))
         except (TypeError, ValueError):
-            limit = 240
+            days = 1
+        limit = days * 240
         response = await self._client.get(
             f"{ZZSHARE_BASE}/v3/market/kline/minute/{ts_code}",
             params={"limit": limit},
@@ -197,9 +198,10 @@ class QuoteClient:
         for item in items:
             raw = str(item.get("trade_time") or "")
             try:
-                when = datetime.strptime(raw, "%Y%m%d%H%M").replace(
-                    tzinfo=UTC
-                ) - utc_offset
+                when = (
+                    datetime.strptime(raw, "%Y%m%d%H%M").replace(tzinfo=UTC)
+                    - utc_offset
+                )
                 ts = int(when.timestamp())
             except (ValueError, OverflowError, OSError):
                 continue

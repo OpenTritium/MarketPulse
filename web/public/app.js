@@ -419,12 +419,50 @@ function renderKlineSection(container, symbols, event) {
       granularity,
     });
     if (granularity === "day") params.set("days", "120");
+    else params.set("days", "2"); // 最近 2 个交易日，供选「事件后最近交易日」
     api(`/quote/kline?${params}`)
       .then((data) => {
         chartBox.replaceChildren();
         if (!data.kline?.length) {
           chartBox.append(el("div", "muted", "暂无行情数据"));
           return;
+        }
+        // 分时：按北京时间交易日分组，选「事件后最近交易日」显示
+        // （收盘后/停牌期新闻 → 次日盘；事件在盘中 → 当日盘）
+        let kline = data.kline;
+        let targetDay = null;
+        if (granularity === "minute") {
+          const bjDay = (ts) => {
+            const d = new Date(ts * 1000 + 8 * 3600 * 1000);
+            return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+          };
+          const groups = new Map();
+          for (const k of kline) {
+            const day = bjDay(k.date);
+            if (!groups.has(day)) groups.set(day, []);
+            groups.get(day).push(k);
+          }
+          const days = [...groups.keys()].sort((a, b) => a - b);
+          let evDay = null;
+          let evMin = null;
+          const evTs = eventTime ? Date.parse(eventTime) : NaN;
+          if (!Number.isNaN(evTs)) {
+            evDay = bjDay(evTs / 1000);
+            const d = new Date(evTs + 8 * 3600 * 1000);
+            evMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+          }
+          if (evDay != null) {
+            // 盘中 9:30-11:30 / 13:00-15:00 → 事件日；其余 → 事件日之后首个交易日
+            const inSession =
+              evMin != null && ((evMin >= 570 && evMin <= 690) || (evMin >= 780 && evMin <= 900));
+            targetDay =
+              (inSession ? days.find((d) => d === evDay) : null) ??
+              days.find((d) => d > evDay) ??
+              days[days.length - 1];
+          } else {
+            targetDay = days[days.length - 1];
+          }
+          kline = groups.get(targetDay) ?? kline;
         }
         activeKlineChart = LightweightCharts.createChart(chartBox, {
           height: 280,
@@ -460,7 +498,7 @@ function renderKlineSection(container, symbols, event) {
             ? k.date // 后端已转 UTC 秒（UTCTimestamp）
             : k.date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
         series.setData(
-          data.kline.map((k) => ({
+          kline.map((k) => ({
             time: fmtTime(k),
             open: k.open,
             high: k.high,
@@ -471,7 +509,7 @@ function renderKlineSection(container, symbols, event) {
         activeKlineChart.timeScale().fitContent();
         // 数据说明：分时显示交易日/收盘状态，日线显示范围
         if (granularity === "minute") {
-          const lastTs = data.kline[data.kline.length - 1].date;
+          const lastTs = kline[kline.length - 1].date;
           const bj = new Date(lastTs * 1000 + 8 * 3600 * 1000);
           const dateLabel = `${bj.getUTCMonth() + 1}月${bj.getUTCDate()}日`;
           const closed = bj.getUTCHours() === 15 && bj.getUTCMinutes() === 0;
@@ -481,11 +519,12 @@ function renderKlineSection(container, symbols, event) {
         } else {
           note.textContent = "最近 120 个交易日";
         }
-        // 事件发生时刻：蓝色箭头，随图表缩放/平移。
-        // 分时：事件时刻对齐分钟（clamp 到数据范围）；日线：事件日期（超出落最新）
+        // 事件发生时刻：方向箭头（红↑利多 / 绿↓利空 / 灰圆点中性）。
+        // 分时：事件在盘前/盘后 → 标在目标交易日开盘；盘中 → 事件分钟；
+        // 日线：事件日期（超出落最新）
         if (markerDate) {
-          const first = data.kline[0].date;
-          const last = data.kline[data.kline.length - 1].date;
+          const first = kline[0].date;
+          const last = kline[kline.length - 1].date;
           const useMinute = granularity === "minute" && markerMinuteTs != null;
           const markerTime = useMinute
             ? Math.min(Math.max(markerMinuteTs, first), last)
