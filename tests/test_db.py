@@ -119,3 +119,21 @@ def test_savepoint_keeps_other_batch_writes(store: Store) -> None:
         _, _ = store.merge_or_create(_report(3), _vector(1))
     total, _ = store.timeline()
     assert total == 2
+
+
+def test_raw_text_compressed_roundtrip(store: Store) -> None:
+    """raw_text 写入时 zlib 压缩存 BLOB，读取时解压还原原文。"""
+    report = _report(1)
+    report.raw_text = "水利部针对北京天津启动洪水防御Ⅳ级应急响应。" * 50
+    with store.batch():
+        event_id, _ = store.merge_or_create(report, _vector(0))
+
+    stored = store.conn.execute(
+        "SELECT raw_text FROM reports WHERE event_id = ?", (event_id,)
+    ).fetchone()[0]
+    assert isinstance(stored, bytes), "raw_text 应以 BLOB 存储"
+    assert len(stored) < len(report.raw_text.encode()), "压缩后应小于原文"
+
+    detail = store.event_detail(event_id)
+    assert detail is not None
+    assert detail["reports"][0]["raw_text"] == report.raw_text, "解压后应还原原文"

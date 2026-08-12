@@ -13,6 +13,7 @@ import contextlib
 import hashlib
 import json
 import os
+import zlib
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -303,7 +304,7 @@ class Store:
                 report.title,
                 normalize_optional_utc_timestamp(report.published_at),
                 collected_at,
-                report.raw_text[:8000],
+                zlib.compress(report.raw_text[:8000].encode()),  # 压缩存 BLOB，省 ~60%
                 content_hash,
             ),
         )
@@ -500,20 +501,36 @@ class Store:
             [row],
         )[0]
         reports = self.conn.execute(
-            """SELECT url, source, title, published_at, collected_at
+            """SELECT url, source, title, published_at, collected_at, raw_text
                FROM reports WHERE event_id = ? ORDER BY collected_at""",
             (event_id,),
         ).fetchall()
-        event["reports"] = [
-            dict(
+        event["reports"] = []
+        for report in reports:
+            raw = report[5]
+            if isinstance(raw, bytes):
+                try:
+                    raw_text = zlib.decompress(raw).decode()
+                except zlib.error:
+                    raw_text = raw.decode(errors="replace")  # 兼容旧明文数据
+            else:
+                raw_text = raw
+            item = dict(
                 zip(
-                    ["url", "source", "title", "published_at", "collected_at"],
+                    [
+                        "url",
+                        "source",
+                        "title",
+                        "published_at",
+                        "collected_at",
+                        "raw_text",
+                    ],
                     report,
                     strict=True,
                 )
             )
-            for report in reports
-        ]
+            item["raw_text"] = raw_text  # 覆盖为解压后的原文
+            event["reports"].append(item)
         return event
 
     def search_similar(
