@@ -1,0 +1,40 @@
+# 站点配置模板（.template 后缀：entrypoint 启动时用环境变量替换 $PORT / $BACKEND_URL）
+# 经 20-envsubst-on-templates.sh 渲染为 /etc/nginx/conf.d/default.conf
+server {
+    listen $PORT;
+    server_name _;
+
+    # 压缩：nginx:alpine 未编译 zstd 模块，用自带 gzip（zstd 不支持时浏览器自动回退）
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_proxied any;   # /api 反代的 JSON 响应也压缩
+    gzip_types
+        text/html
+        text/css
+        application/javascript
+        application/json
+        image/svg+xml;
+
+    # 静态资源根目录（index.html / app.js / style.css）
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # API 同源反代：/api/timeline -> ${BACKEND_URL}/timeline
+    location /api/ {
+        proxy_pass ${BACKEND_URL}/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 5s;
+    }
+
+    # 前端静态文件：默认尝试 index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

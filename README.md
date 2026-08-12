@@ -57,12 +57,11 @@ curl 'http://127.0.0.1:8000/search?q=央行+降准'
 
 ## 前端（web/）
 
-Bun 单页仪表盘：监听 8443，`/api/*` 反代到后端，其余路径托管静态页面（canary 编译时内嵌进二进制）。
+nginx 单页仪表盘：监听 8443，`/api/*` 反代到后端，其余路径托管静态页面。
 
 ```bash
 cd web
-bun run dev        # 本地开发（默认 8443）
-docker build -t market-pulse-web .   # 生产：oven/bun:canary 编译单二进制
+docker build -t market-pulse-web .   # nginx:alpine，静态资源 + 同源反代
 
 docker run -d --name market-pulse-web \
   --network host \
@@ -70,7 +69,7 @@ docker run -d --name market-pulse-web \
   market-pulse-web
 ```
 
-环境变量：`PORT`（默认 8443）、`BACKEND_URL`（默认 `http://127.0.0.1:8000`）。质量检查：`bun run typecheck`（tsc）、`bun run lint`（oxlint）。
+环境变量：`PORT`（默认 8443）、`BACKEND_URL`（默认 `http://127.0.0.1:8000`），启动时经官方 `20-envsubst-on-templates` 注入 nginx 配置。
 
 ## 常见问题
 
