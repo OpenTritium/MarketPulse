@@ -509,7 +509,6 @@ main {
   z-index: 1;
 }
 
-.symbol-tag {
-  cursor: help;
-  border-bottom: 1px dashed var(--muted);
+.symbol-tag:hover {
+  border-color: var(--accent);
 }
