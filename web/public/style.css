@@ -375,7 +375,12 @@ main {
 }
 
 .detail-block {
-  margin-top: 12px;
+  margin-top: 16px;
+}
+
+.detail-block .sources {
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .report {

@@ -186,9 +186,7 @@ class Store:
             ("factors", "TEXT"),
         ):
             if name not in names:
-                self.conn.execute(
-                    f"ALTER TABLE reports ADD COLUMN {name} {ddl}"
-                )
+                self.conn.execute(f"ALTER TABLE reports ADD COLUMN {name} {ddl}")
 
     def _migrate_timestamps(self) -> None:
         """把历史 SQLite UTC 文本升级为统一 RFC 3339 UTC 格式。"""
