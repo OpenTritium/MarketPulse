@@ -498,8 +498,9 @@ function renderKlineSection(container, symbols, event) {
           if (inRange) {
             // 方向语义（主流行情软件习惯）：利多红↑、利空绿↓、中性灰圆点
             const s = event?.sentiment;
-            const marker =
-              s > 0.15
+            const marker = {
+              time: markerTime,
+              ...(s > 0.15
                 ? {
                     position: "aboveBar",
                     color: "#e5484d",
@@ -518,7 +519,8 @@ function renderKlineSection(container, symbols, event) {
                       color: "#8b98a5",
                       shape: "circle",
                       text: "",
-                    };
+                    }),
+            };
             LightweightCharts.createSeriesMarkers(series, [marker]);
           }
         }
