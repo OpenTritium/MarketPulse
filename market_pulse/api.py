@@ -474,7 +474,7 @@ async def quote_kline(
         pattern=r"^[0-9A-Z.]{1,12}$",
         description="标的代码（带交易所后缀），如 000001.SZ / 600519.SH",
     ),
-    days: int = Query(120, ge=10, le=500),
+    days: int = Query(120, ge=1, le=500),
     granularity: str = Query("minute", pattern="^(minute|day)$"),
 ) -> dict[str, Any]:
     """标的 K 线（zzshare 行情源代理）：minute=当日 1min 分时，day=日线。"""
