@@ -5,12 +5,8 @@
 # 降级禁用——采集只用 fetch，不需要 RAG 向量检索）。
 #
 # 构建机需要网络（拉镜像/npm 包/Chromium/模型）；运行时零下载。
-# 镜像 tag 可用 ARG 切换：docker build --build-arg BUN_TAG=1.3.14（stable）。
-
-ARG BUN_TAG=canary
-
 # ---------- Build stage ----------
-FROM oven/bun:${BUN_TAG} AS build
+FROM oven/bun:canary AS build
 
 WORKDIR /app
 
@@ -61,7 +57,7 @@ RUN find /app/node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.m
     && find /app/node_modules/wreq-js/rust -type f ! -name 'wreq-js.linux-x64-gnu.node' -delete 2>/dev/null || true
 
 # ---------- Runtime stage ----------
-FROM oven/bun:${BUN_TAG}
+FROM oven/bun:canary
 
 # Chromium 的 OS 依赖（bun 镜像基于 Debian，apt 直接装；无需 ldd 闭包）
 RUN apt-get update \
