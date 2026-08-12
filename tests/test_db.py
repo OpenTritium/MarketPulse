@@ -164,3 +164,26 @@ def test_legacy_events_get_impact_sum_column(store: Store) -> None:
     """旧库启动时自动补 impact_sum 列（PRAGMA 检测 + ALTER）。"""
     columns = [r[1] for r in store.conn.execute("PRAGMA table_info(events)").fetchall()]
     assert "impact_sum" in columns
+
+
+def test_search_hybrid_combines_keyword_and_vector(store: Store) -> None:
+    """混合检索：关键词通道 + 向量通道的结果都要出现（RRF 不丢通道）。"""
+    # 三条事件：A 标题含 C919（关键词命中）、B 仅向量相近、C 无关
+    with store.batch():
+        a = _report(1)
+        a.title = "C919 首航国际航线"
+        b = _report(2)
+        b.title = "国产大飞机商业运营"
+        c = _report(3)
+        c.title = "白酒板块午后走强"
+        a_id, _ = store.merge_or_create(a, _vector(0))
+        b_id, _ = store.merge_or_create(b, _vector(0))
+        store.merge_or_create(c, _vector(1))
+
+    # 查询 C919：向量通道（全部向量接近 0 的 B 也应召回）
+    results = store.search_similar("C919", _vector(0), k=5)
+    ids = {r["id"] for r in results}
+    assert a_id in ids, "关键词命中必须出现"
+    assert b_id in ids, "向量相近必须出现（RRF 不丢向量通道）"
+    # 关键词命中排第一
+    assert results[0]["id"] == a_id

@@ -643,9 +643,9 @@ class Store:
             order.append(key)
         for rank, row in enumerate(vec_rows):
             key = row[0]
-            scores[key] = scores.get(key, 0.0) + 1.0 / (60.0 + rank)
             if key not in scores:
                 order.append(key)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (60.0 + rank)
         by_id = {row[0]: row for row in kw_rows}
         by_id.update({row[0]: row for row in vec_rows})
         ranked = sorted(order, key=lambda i: scores[i], reverse=True)[:k]
