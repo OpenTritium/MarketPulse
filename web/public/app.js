@@ -430,8 +430,8 @@ function renderKlineSection(container, symbols, event) {
               shape: sentiment > 0.05 ? "arrowUp" : sentiment < -0.05 ? "arrowDown" : "circle",
               text: "事件",
             };
-            // v5 API：markers 改为模块级函数 LightweightCharts.createSeriesMarkers(chart, markers)
-            LightweightCharts.createSeriesMarkers(activeKlineChart, [marker]);
+            // v5 API：LightweightCharts.createSeriesMarkers(series, markers)（模块级，第一参数是 series）
+            LightweightCharts.createSeriesMarkers(series, [marker]);
           }
         }
         activeKlineChart.timeScale().fitContent();
