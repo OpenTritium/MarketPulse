@@ -32,9 +32,7 @@ class WigoloMCP:
         # wigolo REST 端点：/mcp → /v1（如 http://127.0.0.1:3333/mcp）
         self._rest_base: str = cfg.wigolo_url.removesuffix("/mcp") + "/v1"
         self._headers: dict[str, str] = (
-            {"Authorization": "Bearer " + cfg.wigolo_token}
-            if cfg.wigolo_token
-            else {}
+            {"Authorization": "Bearer " + cfg.wigolo_token} if cfg.wigolo_token else {}
         )
         self._client: httpx.AsyncClient = httpx.AsyncClient(
             timeout=_CALL_TIMEOUT_SECONDS
@@ -65,7 +63,9 @@ class WigoloMCP:
                 timeout=_CALL_TIMEOUT_SECONDS,
             )
         except TimeoutError as exc:
-            raise MCPError(f"fetch 超时（>{_CALL_TIMEOUT_SECONDS:.0f}s）: {url}") from exc
+            raise MCPError(
+                f"fetch 超时（>{_CALL_TIMEOUT_SECONDS:.0f}s）: {url}"
+            ) from exc
         except httpx.HTTPError as exc:
             raise MCPError(f"fetch 调用失败: {exc}") from exc
         if response.status_code >= 400:
