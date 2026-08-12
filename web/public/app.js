@@ -256,7 +256,21 @@ async function openDetail(eventId) {
       container.append(block);
       // 行情 K 线：因子块之前（有 ts_code 的标的）
       const withCode = symbols.filter((s) => s.ts_code);
-      if (withCode.length) renderKlineSection(container, withCode, event);
+      if (withCode.length) {
+        renderKlineSection(container, withCode, event);
+      } else {
+        container.append(
+          el("div", "detail-block", el("span", "muted", "暂无行情（该事件标的无 A 股代码）")),
+        );
+      }
+    } else {
+      container.append(
+        el(
+          "div",
+          "detail-block",
+          el("span", "muted", "暂无相关标的 · 无行情图表（宏观/政策类事件通常不指向具体标的）"),
+        ),
+      );
     }
     if (event.factors && Object.keys(event.factors).length) {
       const block = el("div", "detail-block");
