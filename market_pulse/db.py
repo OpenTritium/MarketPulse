@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS events (
   category TEXT,
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
-  report_count INTEGER NOT NULL DEFAULT 1
+  report_count INTEGER NOT NULL DEFAULT 1,
+  impact_sum REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_events_first_seen ON events(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_last_seen ON events(last_seen_at DESC);
@@ -143,6 +144,7 @@ class Store:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(_SCHEMA)
             self._validate_embedding_schema()
+            self._migrate_impact_sum()
             self._migrate_timestamps()
             self.conn.commit()
         except Exception as exc:
@@ -160,6 +162,15 @@ class Store:
             raise RuntimeError(
                 "当前数据库的向量维度与固定模型不兼容；请执行显式数据迁移或重建数据库"
             )
+
+    def _migrate_impact_sum(self) -> None:
+        """旧库补齐 impact_sum 列（impact 加权聚合需要）。"""
+        columns = self.conn.execute("PRAGMA table_info(events)").fetchall()
+        if any(row[1] == "impact_sum" for row in columns):
+            return
+        self.conn.execute(
+            "ALTER TABLE events ADD COLUMN impact_sum REAL NOT NULL DEFAULT 0"
+        )
 
     def _migrate_timestamps(self) -> None:
         """把历史 SQLite UTC 文本升级为统一 RFC 3339 UTC 格式。"""
@@ -265,8 +276,9 @@ class Store:
         self.conn.execute(
             """INSERT INTO events
                (id, title, summary, headline, sentiment, impact, factors,
-                related_symbols, category, first_seen_at, last_seen_at, report_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+                related_symbols, category, first_seen_at, last_seen_at, report_count,
+                impact_sum)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
             (
                 event_id,
                 report.title,
@@ -283,6 +295,7 @@ class Store:
                 None,
                 now,
                 now,
+                report.impact or 0.0,
             ),
         )
         self._attach_report(event_id, report, content_hash, now)
@@ -318,24 +331,31 @@ class Store:
     def _update_event_aggregates(
         self, event_id: str, report: Report, updated_at: str
     ) -> None:
-        """合并后滚动平均情绪和因子，并更新最后出现时间。"""
+        """合并后按 impact 加权平均情绪和因子，并更新最后出现时间。"""
         row = self.conn.execute(
-            "SELECT sentiment, impact, factors, report_count FROM events WHERE id = ?",
+            "SELECT sentiment, impact, factors, report_count, impact_sum FROM events WHERE id = ?",
             (event_id,),
         ).fetchone()
         if not row:
             return
-        old_sentiment, old_impact, old_factors_json, report_count = row
+        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum = row
         try:
             count = int(report_count or 1)
         except (TypeError, ValueError):
             count = 1
-        new_sentiment = ((old_sentiment or 0.0) * count + (report.sentiment or 0.0)) / (
-            count + 1
-        )
-        new_impact = ((old_impact or 0.0) * count + (report.impact or 0.0)) / (
-            count + 1
-        )
+        report_impact = report.impact or 0.0
+        new_impact_sum = (old_impact_sum or 0.0) + report_impact
+
+        def _weighted(old: float | None, new: float) -> float:
+            """impact 加权；权重和为 0（全部无影响报道）时回退简单平均。"""
+            if new_impact_sum > 0:
+                return ((old or 0.0) * (old_impact_sum or 0.0) + new * report_impact) / (
+                    new_impact_sum
+                )
+            return ((old or 0.0) * count + new) / (count + 1)
+
+        new_sentiment = _weighted(old_sentiment, report.sentiment or 0.0)
+        new_impact = _weighted(old_impact, report_impact)
         old_factors = try_json(old_factors_json)
         merged_factors: dict[str, float] = {}
         for name in set(old_factors or {}) | set(report.factors):
@@ -347,17 +367,18 @@ class Store:
                 new_factor = float(report.factors.get(name, 0.0))
             except (TypeError, ValueError):
                 old_factor, new_factor = 0.0, 0.0
-            merged_factors[name] = (old_factor * count + new_factor) / (count + 1)
+            merged_factors[name] = _weighted(old_factor, new_factor)
 
         self.conn.execute(
             """UPDATE events SET sentiment = ?, impact = ?, factors = ?,
-               last_seen_at = ?, report_count = report_count + 1
+               last_seen_at = ?, report_count = report_count + 1, impact_sum = ?
                WHERE id = ?""",
             (
                 new_sentiment,
                 new_impact,
                 json.dumps(merged_factors, ensure_ascii=False),
                 updated_at,
+                new_impact_sum,
                 event_id,
             ),
         )
@@ -511,7 +532,7 @@ class Store:
             if isinstance(raw, bytes):
                 try:
                     raw_text = zlib.decompress(raw).decode()
-                except zlib.error:
+                except (zlib.error, ValueError):
                     raw_text = raw.decode(errors="replace")  # 兼容旧明文数据
             else:
                 raw_text = raw

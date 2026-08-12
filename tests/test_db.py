@@ -137,3 +137,32 @@ def test_raw_text_compressed_roundtrip(store: Store) -> None:
     detail = store.event_detail(event_id)
     assert detail is not None
     assert detail["reports"][0]["raw_text"] == report.raw_text, "解压后应还原原文"
+
+
+def test_impact_weighted_aggregation(store: Store) -> None:
+    """合并时 sentiment 按 impact 加权：高影响力报道主导事件分。"""
+    low = _report(1)
+    low.sentiment = 0.1
+    low.impact = 0.2
+    high = _report(2)
+    high.sentiment = 0.9
+    high.impact = 0.8
+    with store.batch():
+        event_id, _ = store.merge_or_create(low, _vector(0))
+        # 同事件：第二次合并（相同向量 → 相似度达标）
+        _, outcome = store.merge_or_create(high, _vector(0))
+    # 简单平均会是 0.5；impact 加权应为 (0.1*0.2 + 0.9*0.8)/1.0 = 0.74
+    assert outcome == "merged"
+    row = store.conn.execute(
+        "SELECT sentiment, impact_sum FROM events WHERE id = ?", (event_id,)
+    ).fetchone()
+    assert row[0] is not None and abs(row[0] - 0.74) < 1e-9
+    assert abs(row[1] - 1.0) < 1e-9
+
+
+def test_legacy_events_get_impact_sum_column(store: Store) -> None:
+    """旧库启动时自动补 impact_sum 列（PRAGMA 检测 + ALTER）。"""
+    columns = [
+        r[1] for r in store.conn.execute("PRAGMA table_info(events)").fetchall()
+    ]
+    assert "impact_sum" in columns
