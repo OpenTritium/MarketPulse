@@ -237,12 +237,23 @@ async function openDetail(eventId) {
     container.append(meta);
     if (event.summary) container.append(el("p", "detail-summary", event.summary));
     if (event.related_symbols?.length) {
+      const symbols = normalizeSymbols(event.related_symbols);
       const block = el("div", "detail-block");
       block.append(el("strong", null, "相关标的："));
       const tags = el("div", "sources");
-      for (const s of event.related_symbols) tags.append(el("span", "tag", s));
+      for (const s of symbols) {
+        const tag = el("span", "tag", s.name);
+        if (s.ts_code) {
+          tag.classList.add("symbol-tag");
+          tag.title = s.ts_code;
+        }
+        tags.append(tag);
+      }
       block.append(tags);
       container.append(block);
+      // 行情 K 线：因子块之前（有 ts_code 的标的）
+      const withCode = symbols.filter((s) => s.ts_code);
+      if (withCode.length) renderKlineSection(container, withCode);
     }
     if (event.factors && Object.keys(event.factors).length) {
       const block = el("div", "detail-block");
@@ -339,3 +350,92 @@ refreshDashboard();
 setInterval(() => {
   if (state.tab === "dashboard") refreshDashboard();
 }, 60_000);
+
+// ---- 行情 K 线（lightweight-charts）----
+
+function normalizeSymbols(list) {
+  // 兼容旧数据（字符串数组）与新数据（{name, ts_code, type} 对象数组）
+  return (list || []).map((s) =>
+    typeof s === "string" ? { name: s, ts_code: "", type: "stock" } : s,
+  );
+}
+
+let activeKlineChart = null;
+
+function renderKlineSection(container, symbols) {
+  const block = el("div", "detail-block");
+  block.append(el("strong", null, "行情"));
+  const tabs = el("div", "kline-tabs");
+  const chartBox = el("div", "kline-box");
+  block.append(tabs, chartBox);
+  container.append(block);
+
+  let current = null;
+
+  function loadKline(symbol) {
+    if (activeKlineChart) {
+      activeKlineChart.remove();
+      activeKlineChart = null;
+    }
+    chartBox.replaceChildren(el("div", "muted", `加载 ${symbol.name} K 线…`));
+    api(`/quote/kline?ts_code=${encodeURIComponent(symbol.ts_code)}&days=120`)
+      .then((data) => {
+        chartBox.replaceChildren();
+        if (!data.kline?.length) {
+          chartBox.append(el("div", "muted", "暂无行情数据"));
+          return;
+        }
+        activeKlineChart = LightweightCharts.createChart(chartBox, {
+          height: 280,
+          layout: {
+            background: { color: "transparent" },
+            textColor: "#8b98a5",
+            fontSize: 11,
+          },
+          grid: {
+            vertLines: { color: "#1e2630" },
+            horzLines: { color: "#1e2630" },
+          },
+          crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+          timeScale: { borderColor: "#2a333d" },
+          rightPriceScale: { borderColor: "#2a333d" },
+        });
+        const series = activeKlineChart.addSeries(LightweightCharts.CandlestickSeries, {
+          upColor: "#e5484d",
+          downColor: "#46a758",
+          borderVisible: false,
+          wickUpColor: "#e5484d",
+          wickDownColor: "#46a758",
+        });
+        series.setData(
+          data.kline.map((k) => ({
+            time: k.date.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
+            open: k.open,
+            high: k.high,
+            low: k.low,
+            close: k.close,
+          })),
+        );
+        activeKlineChart.timeScale().fitContent();
+      })
+      .catch((error) => {
+        chartBox.replaceChildren(el("div", "muted", `行情加载失败：${error.message}`));
+      });
+  }
+
+  for (const symbol of symbols) {
+    const tab = el("button", "kline-tab", symbol.name);
+    tab.type = "button";
+    tab.addEventListener("click", () => {
+      if (current === symbol) return;
+      current = symbol;
+      for (const t of tabs.children) t.classList.toggle("active", t === tab);
+      loadKline(symbol);
+    });
+    tabs.append(tab);
+  }
+  // 默认加载第一个标的
+  current = symbols[0];
+  tabs.firstChild?.classList.add("active");
+  loadKline(symbols[0]);
+}

@@ -459,3 +459,44 @@ main {
     grid-column: span 1;
   }
 }
+
+/* ---- 行情 K 线 ---- */
+
+.kline-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.kline-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kline-tab:hover {
+  color: var(--text);
+}
+.kline-tab.active {
+  background: #26313c;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.kline-box {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 6px;
+  background: #12161c;
+}
+
+.symbol-tag {
+  cursor: help;
+  border-bottom: 1px dashed var(--muted);
+}
