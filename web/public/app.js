@@ -354,10 +354,8 @@ setInterval(() => {
 // ---- 行情 K 线（lightweight-charts）----
 
 function normalizeSymbols(list) {
-  // 兼容旧数据（字符串数组）与新数据（{name, ts_code, type} 对象数组）
-  return (list || []).map((s) =>
-    typeof s === "string" ? { name: s, ts_code: "", type: "stock" } : s,
-  );
+  // 数据已统一为 {name, ts_code, type} 对象格式（2026-08 回填），仅兜底非数组
+  return Array.isArray(list) ? list : [];
 }
 
 let activeKlineChart = null;
