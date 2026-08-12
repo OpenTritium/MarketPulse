@@ -426,16 +426,18 @@ function renderKlineSection(container, symbols, event) {
             /(\d{4})(\d{2})(\d{2})/,
             "$1-$2-$3",
           );
+          // 事件日期超出 K 线范围时落在最新一根；蓝色箭头随图表缩放/平移
           const lineDate = markerDate >= lastDate ? lastDate : markerDate;
           if (lineDate >= firstDate) {
-            setTimeout(() => {
-              const x = activeKlineChart.timeScale().timeToCoordinate(lineDate);
-              if (x != null) {
-                const line = el("div", "event-line");
-                line.style.left = `${x}px`;
-                chartBox.appendChild(line);
-              }
-            }, 300);
+            LightweightCharts.createSeriesMarkers(series, [
+              {
+                time: lineDate,
+                position: "aboveBar",
+                color: "#4da3ff",
+                shape: "arrowUp",
+                text: "事件",
+              },
+            ]);
           }
         }
       })

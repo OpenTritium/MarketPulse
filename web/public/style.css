@@ -497,17 +497,7 @@ main {
   position: relative;
 }
 
-/* 事件发生时刻竖线 */
-.event-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--accent);
-  opacity: 0.8;
-  pointer-events: none;
-  z-index: 1;
-}
+/* 事件发生时刻标记由 lightweight-charts marker 渲染（跟随缩放） */
 
 .symbol-tag:hover {
   border-color: var(--accent);
