@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS events (
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
   report_count INTEGER NOT NULL DEFAULT 1,
-  impact_sum REAL NOT NULL DEFAULT 0
+  impact_sum REAL NOT NULL DEFAULT 0,
+  published_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_events_first_seen ON events(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_last_seen ON events(last_seen_at DESC);
@@ -149,6 +150,7 @@ class Store:
             self._validate_embedding_schema()
             self._migrate_impact_sum()
             self._migrate_report_scores()
+            self._migrate_events_published_at()
             self._migrate_timestamps()
             self.conn.commit()
         except Exception as exc:
@@ -187,6 +189,13 @@ class Store:
         ):
             if name not in names:
                 self.conn.execute(f"ALTER TABLE reports ADD COLUMN {name} {ddl}")
+
+    def _migrate_events_published_at(self) -> None:
+        """旧库补齐 events.published_at 列（时间线按报道发布时间展示）。"""
+        columns = self.conn.execute("PRAGMA table_info(events)").fetchall()
+        if any(row[1] == "published_at" for row in columns):
+            return
+        self.conn.execute("ALTER TABLE events ADD COLUMN published_at TEXT")
 
     def _migrate_timestamps(self) -> None:
         """把历史 SQLite UTC 文本升级为统一 RFC 3339 UTC 格式。"""
@@ -293,8 +302,8 @@ class Store:
             """INSERT INTO events
                (id, title, summary, headline, sentiment, impact, factors,
                 related_symbols, category, first_seen_at, last_seen_at, report_count,
-                impact_sum)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                impact_sum, published_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""",
             (
                 event_id,
                 report.title,
@@ -312,6 +321,7 @@ class Store:
                 now,
                 now,
                 report.impact or 0.0,
+                normalize_optional_utc_timestamp(report.published_at),
             ),
         )
         self._attach_report(event_id, report, content_hash, now)
@@ -355,12 +365,12 @@ class Store:
     ) -> None:
         """合并后按 impact 加权平均情绪和因子，并更新最后出现时间。"""
         row = self.conn.execute(
-            "SELECT sentiment, impact, factors, report_count, impact_sum FROM events WHERE id = ?",
+            "SELECT sentiment, impact, factors, report_count, impact_sum, published_at FROM events WHERE id = ?",
             (event_id,),
         ).fetchone()
         if not row:
             return
-        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum = row
+        old_sentiment, old_impact, old_factors_json, report_count, old_impact_sum, old_published_at = row
         try:
             count = int(report_count or 1)
         except (TypeError, ValueError):
@@ -378,6 +388,11 @@ class Store:
 
         new_sentiment = _weighted(old_sentiment, report.sentiment or 0.0)
         new_impact = _weighted(old_impact, report_impact)
+        report_published = normalize_optional_utc_timestamp(report.published_at)
+        new_published_at = min(
+            filter(None, [row[5], report_published]),
+            default=None,
+        )
         old_factors = try_json(old_factors_json)
         merged_factors: dict[str, float] = {}
         for name in set(old_factors or {}) | set(report.factors):
@@ -393,7 +408,8 @@ class Store:
 
         self.conn.execute(
             """UPDATE events SET sentiment = ?, impact = ?, factors = ?,
-               last_seen_at = ?, report_count = report_count + 1, impact_sum = ?
+               last_seen_at = ?, report_count = report_count + 1, impact_sum = ?,
+               published_at = ?
                WHERE id = ?""",
             (
                 new_sentiment,
@@ -401,6 +417,7 @@ class Store:
                 json.dumps(merged_factors, ensure_ascii=False),
                 updated_at,
                 new_impact_sum,
+                new_published_at,
                 event_id,
             ),
         )
@@ -448,7 +465,7 @@ class Store:
             raise RuntimeError("读取事件总数失败") from exc
         if starting_after is not None:
             cursor = self.conn.execute(
-                "SELECT first_seen_at FROM events WHERE id = ?", (starting_after,)
+                "SELECT COALESCE(published_at, first_seen_at) FROM events WHERE id = ?", (starting_after,)
             ).fetchone()
             if cursor is None:
                 raise ValueError("游标不存在")
@@ -459,11 +476,11 @@ class Store:
             rows = self.conn.execute(
                 """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
                           e.factors, e.related_symbols, e.category,
-                          e.first_seen_at, e.last_seen_at, e.report_count,
+                          e.first_seen_at, e.last_seen_at, e.report_count, e.published_at,
                           (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                            WHERE r.event_id = e.id) AS sources
                    FROM events e
-                   ORDER BY e.first_seen_at DESC, e.id DESC
+                   ORDER BY COALESCE(e.published_at, e.first_seen_at) DESC, e.id DESC
                    LIMIT ?""",
                 (limit + 1,),
             ).fetchall()
@@ -471,12 +488,12 @@ class Store:
             rows = self.conn.execute(
                 """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
                           e.factors, e.related_symbols, e.category,
-                          e.first_seen_at, e.last_seen_at, e.report_count,
+                          e.first_seen_at, e.last_seen_at, e.report_count, e.published_at,
                           (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                            WHERE r.event_id = e.id) AS sources
                    FROM events e
-                   WHERE e.first_seen_at < ? OR (e.first_seen_at = ? AND e.id < ?)
-                   ORDER BY e.first_seen_at DESC, e.id DESC
+                   WHERE COALESCE(e.published_at, e.first_seen_at) < ? OR (COALESCE(e.published_at, e.first_seen_at) = ? AND e.id < ?)
+                   ORDER BY COALESCE(e.published_at, e.first_seen_at) DESC, e.id DESC
                    LIMIT ?""",
                 (cursor_at, cursor_at, starting_after, limit + 1),
             ).fetchall()
@@ -494,6 +511,7 @@ class Store:
                 "first_seen_at",
                 "last_seen_at",
                 "report_count",
+                "published_at",
                 "sources",
             ],
             rows,
@@ -519,7 +537,7 @@ class Store:
         row = self.conn.execute(
             """SELECT e.id, e.title, e.summary, e.headline, e.sentiment, e.impact,
                       e.factors, e.related_symbols, e.category,
-                      e.first_seen_at, e.last_seen_at, e.report_count
+                      e.first_seen_at, e.last_seen_at, e.report_count, e.published_at
                FROM events e WHERE e.id = ?""",
             (event_id,),
         ).fetchone()
@@ -540,6 +558,7 @@ class Store:
                 "first_seen_at",
                 "last_seen_at",
                 "report_count",
+                "published_at",
             ],
             [row],
         )[0]
@@ -587,7 +606,7 @@ class Store:
         query = _vec_json(embedding)
         rows = self.conn.execute(
             """SELECT e.id, e.title, e.summary, e.sentiment, e.first_seen_at,
-                      e.last_seen_at, e.factors,
+                      e.last_seen_at, e.published_at, e.factors,
                       (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
                        WHERE r.event_id = e.id) AS sources
                FROM vector_top_k('emb_idx', ?, ?) AS vt
@@ -603,6 +622,7 @@ class Store:
                 "sentiment",
                 "first_seen_at",
                 "last_seen_at",
+                "published_at",
                 "factors",
                 "sources",
             ],

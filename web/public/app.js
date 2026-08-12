@@ -159,7 +159,8 @@ async function refreshDashboard() {
 
 function renderEventMeta(event) {
   const parts = [];
-  if (event.first_seen_at) parts.push(fmtTime(event.first_seen_at));
+  const when = event.published_at || event.first_seen_at;
+  if (when) parts.push(fmtTime(when));
   parts.push("· 情绪");
   const meta = el("div", "meta");
   meta.append(el("span", null, parts.join(" ")));
@@ -232,7 +233,7 @@ async function openDetail(eventId) {
 
     container.append(el("h2", null, event.title));
     const meta = renderEventMeta(event);
-    meta.append(el("span", null, ` · 首次 ${fmtTime(event.first_seen_at)}`));
+    meta.append(el("span", null, ` · 报道 ${fmtTime(event.published_at || event.first_seen_at)}`));
     container.append(meta);
     if (event.summary) container.append(el("p", "detail-summary", event.summary));
     if (event.related_symbols?.length) {
