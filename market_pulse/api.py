@@ -463,7 +463,9 @@ def search(
     runtime = _runtime(request)
     return {
         "query": q,
-        "results": runtime.store.search_similar(runtime.embedder.embed(q), k=k),
+        "results": runtime.store.search_similar(
+            q, runtime.embedder.embed(q), k=k
+        ),
     }
 
 

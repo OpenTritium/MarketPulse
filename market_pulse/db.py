@@ -596,15 +596,35 @@ class Store:
         return event
 
     def search_similar(
-        self, embedding: list[float], k: int = 10
+        self, query: str, embedding: list[float], k: int = 10
     ) -> list[dict[str, Any]]:
-        """语义检索：事件摘要向量最近邻。"""
+        """混合检索：关键词（标题/摘要）+ 向量近邻，RRF 融合排序。
+
+        专有名词（C919、ts_code 等）对小型 embedding 模型召回弱，
+        关键词通道保证精确命中；向量通道兜底语义近义。
+        """
         if len(embedding) != EMBEDDING_DIM:
             raise ValueError(
                 f"embedding 维度错误：期望 {EMBEDDING_DIM}，实际 {len(embedding)}"
             )
-        query = _vec_json(embedding)
-        rows = self.conn.execute(
+        esc = (
+            query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        pattern = f"%{esc}%"
+        # 关键词通道：标题命中优先于仅摘要命中，同组内新事件在前
+        kw_rows = self.conn.execute(
+            """SELECT e.id, e.title, e.summary, e.sentiment, e.first_seen_at,
+                       e.last_seen_at, e.published_at, e.factors,
+                       (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
+                        WHERE r.event_id = e.id) AS sources,
+                       CASE WHEN e.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END AS kw_grp
+                FROM events e
+                WHERE e.title LIKE ? ESCAPE '\\' OR e.summary LIKE ? ESCAPE '\\'
+                ORDER BY kw_grp, e.first_seen_at DESC""",
+            (pattern, pattern, pattern),
+        ).fetchall()
+        # 向量通道：取 2k 候选
+        vec_rows = self.conn.execute(
             """SELECT e.id, e.title, e.summary, e.sentiment, e.first_seen_at,
                       e.last_seen_at, e.published_at, e.factors,
                       (SELECT GROUP_CONCAT(DISTINCT r.source) FROM reports r
@@ -612,8 +632,24 @@ class Store:
                FROM vector_top_k('emb_idx', ?, ?) AS vt
                JOIN event_embeddings ae ON ae.rowid = vt.id
                JOIN events e ON e.id = ae.event_id""",
-            (query, k),
+            (_vec_json(embedding), k * 2),
         ).fetchall()
+        # RRF 融合：score = Σ 1/(60 + rank)
+        scores: dict[str, float] = {}
+        order: list[str] = []
+        for rank, row in enumerate(kw_rows):
+            key = row[0]
+            scores[key] = scores.get(key, 0.0) + 1.0 / (60.0 + rank)
+            order.append(key)
+        for rank, row in enumerate(vec_rows):
+            key = row[0]
+            scores[key] = scores.get(key, 0.0) + 1.0 / (60.0 + rank)
+            if key not in scores:
+                order.append(key)
+        by_id = {row[0]: row for row in kw_rows}
+        by_id.update({row[0]: row for row in vec_rows})
+        ranked = sorted(order, key=lambda i: scores[i], reverse=True)[:k]
+        rows = [by_id[i] for i in ranked]
         return _rows_to_dicts(
             [
                 "id",

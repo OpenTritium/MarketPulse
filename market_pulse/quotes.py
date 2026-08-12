@@ -108,9 +108,7 @@ class QuoteClient:
                 return stock["ts_code"]
         return ""
 
-    async def kline(
-        self, ts_code: str, days: int = 120
-    ) -> list[dict[str, Any]]:
+    async def kline(self, ts_code: str, days: int = 120) -> list[dict[str, Any]]:
         """日线 K 线（最近 N 个交易日），转换为前端图表格式。"""
         from datetime import UTC, datetime, timedelta
 
@@ -133,7 +131,9 @@ class QuoteClient:
         _ = response.raise_for_status()
         body = response.json()
         if body.get("code") != 200:
-            raise QuoteError(f"zzshare 返回异常: {body.get('message', body.get('code'))}")
+            raise QuoteError(
+                f"zzshare 返回异常: {body.get('message', body.get('code'))}"
+            )
         data = body.get("data") or {}
         items = data.get("list") or []
 
