@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -39,6 +40,20 @@ COMMON_INDICES: dict[str, str] = {
 
 class QuoteError(RuntimeError):
     pass
+
+
+def _num(value: Any, default: float = 0.0) -> float:
+    """容错转 float：非数字/NaN 返回默认值。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if number == number else default
+
+
+def _bj_today() -> date:
+    """北京时区（UTC+8）的今天，用于日线范围计算。"""
+    return (datetime.now(UTC) + timedelta(hours=8)).date()
 
 
 class QuoteClient:
@@ -110,9 +125,7 @@ class QuoteClient:
 
     async def kline(self, ts_code: str, days: int = 120) -> list[dict[str, Any]]:
         """日线 K 线（最近 N 个交易日），转换为前端图表格式。"""
-        from datetime import UTC, datetime, timedelta
-
-        end = datetime.now(UTC).date()
+        end = _bj_today()
         try:
             days = max(1, min(int(days), 500))
             start_offset = int(days * 1.6) + 10  # 交易日约 60%，留余量
@@ -137,13 +150,6 @@ class QuoteClient:
         data = body.get("data") or {}
         items = data.get("list") or []
 
-        def _num(value: Any, default: float = 0.0) -> float:
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                return default
-            return number if number == number else default
-
         kline = [
             {
                 "date": str(item["trade_date"]),
@@ -163,8 +169,6 @@ class QuoteClient:
         trade_time 为北京时间 YYYYMMDDHHMM，转换为 UTC 秒时间戳
         （lightweight-charts 的 UTCTimestamp 语义），date 字段即秒整数。
         """
-        from datetime import UTC, datetime, timedelta
-
         try:
             days = max(1, min(int(days), 5))
         except (TypeError, ValueError):
@@ -184,13 +188,6 @@ class QuoteClient:
         data = body.get("data") or {}
         items = data.get("list") or []
         utc_offset = timedelta(hours=8)
-
-        def _num(value: Any, default: float = 0.0) -> float:
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                return default
-            return number if number == number else default
 
         kline = []
         for item in items:

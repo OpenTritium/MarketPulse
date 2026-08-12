@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 
 import pytest
@@ -137,3 +137,19 @@ def test_kline_days_clamped(client: QuoteClient) -> None:
     kline = asyncio.run(client.kline("000800.SZ", days=9999))
     assert len(kline) == 1
     assert kline[0]["date"] == "20260812"
+
+
+def test_bj_today_uses_beijing_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """北京时区跨日边界：UTC 23:30 = 北京次日 07:30。"""
+    import market_pulse.quotes as quotes
+
+    class FakeDT:
+        @classmethod
+        def now(cls, tz: Any) -> datetime:
+            del tz
+            return datetime(2026, 8, 12, 23, 30, tzinfo=UTC)
+
+    monkeypatch.setattr(quotes, "datetime", FakeDT)
+    assert quotes._bj_today() == date(2026, 8, 13)  # type: ignore[reportPrivateUsage]
