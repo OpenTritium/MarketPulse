@@ -364,6 +364,14 @@ function normalizeSymbols(list) {
 
 let activeKlineChart = null;
 
+// 分时刻度/十字线标签：UTC 秒 → 北京时间 HH:MM
+function bjMinuteLabel(time) {
+  const bj = new Date(time * 1000 + 8 * 3600 * 1000);
+  const hh = String(bj.getUTCHours()).padStart(2, "0");
+  const mm = String(bj.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function renderKlineSection(container, symbols, event) {
   const block = el("div", "detail-block");
   block.append(el("strong", null, "行情"));
@@ -429,7 +437,14 @@ function renderKlineSection(container, symbols, event) {
             horzLines: { color: "#1e2630" },
           },
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-          timeScale: { borderColor: "#2a333d" },
+          // 分时：刻度/十字线时间显示北京时间 HH:MM（默认格式是同一天重复的日期）
+          localization: {
+            timeFormatter: granularity === "minute" ? bjMinuteLabel : undefined,
+          },
+          timeScale: {
+            borderColor: "#2a333d",
+            tickMarkFormatter: granularity === "minute" ? bjMinuteLabel : undefined,
+          },
           rightPriceScale: { borderColor: "#2a333d" },
         });
         const series = activeKlineChart.addSeries(LightweightCharts.CandlestickSeries, {
