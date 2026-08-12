@@ -1,0 +1,20 @@
+# Market Pulse web 前端质量检测（bunx 临时拉取工具，不落 package.json）
+
+set shell := ["bash", "-cu"]
+
+# 格式化三件套
+fmt:
+    bunx prettier --write public/
+
+# 三件套 lint：JS / CSS / HTML
+lint:
+    bunx oxlint public/app.js
+    bunx stylelint public/style.css
+    bunx html-validate public/index.html
+
+# 完整检查：格式 + lint
+check:
+    bunx prettier --check public/
+    bunx oxlint public/app.js
+    bunx stylelint public/style.css
+    bunx html-validate public/index.html

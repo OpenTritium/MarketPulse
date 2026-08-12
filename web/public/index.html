@@ -6,9 +6,14 @@
     <title>Market Pulse · 市场情绪</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
+
   <body>
     <header>
       <h1>Market Pulse · 市场情绪</h1>
+      <nav class="tabs">
+        <button id="tab-dashboard" type="button" class="tab active">仪表盘</button>
+        <button id="tab-timeline" type="button" class="tab">时间线</button>
+      </nav>
       <div class="header-actions">
         <input id="search-input" type="search" placeholder="语义搜索，如：央行 降准" />
         <button id="search-btn" type="button">搜索</button>
@@ -18,30 +23,39 @@
     </header>
 
     <main>
-      <section id="overview" class="cards"></section>
-
-      <section id="search-results" hidden>
-        <h2>搜索结果 <span id="search-query" class="muted"></span></h2>
-        <div id="search-list" class="event-list"></div>
+      <section id="view-dashboard">
+        <div class="bento">
+          <div class="bento-card span-2" id="overview-card">
+            <h2>情绪总览</h2>
+            <div id="overview" class="cards"></div>
+          </div>
+          <div class="bento-card" id="timeseries-card">
+            <h2>近 7 日情绪</h2>
+            <div id="timeseries" class="bars"></div>
+          </div>
+          <div class="bento-card span-2" id="factors-card">
+            <h2>因子分解</h2>
+            <div id="factors" class="factors"></div>
+          </div>
+        </div>
       </section>
 
-      <section id="timeseries-section">
-        <h2>近 7 日情绪</h2>
-        <div id="timeseries" class="bars"></div>
-      </section>
-
-      <section id="factors-section">
-        <h2>因子分解</h2>
-        <div id="factors" class="factors"></div>
-      </section>
-
-      <section>
-        <h2>事件时间线</h2>
+      <section id="view-timeline" hidden>
         <div id="timeline" class="event-list"></div>
         <div class="pager">
           <button id="load-more" type="button" hidden>加载更多</button>
           <span id="timeline-status" class="muted"></span>
         </div>
+      </section>
+
+      <section id="view-detail" hidden>
+        <button id="back-btn" type="button">← 返回时间线</button>
+        <div id="event-detail"></div>
+      </section>
+
+      <section id="search-results" hidden>
+        <h2>搜索结果 <span id="search-query" class="muted"></span></h2>
+        <div id="search-list" class="event-list"></div>
       </section>
     </main>
 

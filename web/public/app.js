@@ -1,13 +1,16 @@
-// Market Pulse 前端：原生 JS，无构建链。所有 /api/* 请求经 bun 反代同源转发。
-// 渲染只用 DOM API + textContent，新闻文本属外部数据，杜绝 innerHTML XSS。
+// Market Pulse 前端：nginx 托管 + /api 同源反代，无框架。
+// 渲染只用 DOM API + textContent，杜绝 innerHTML XSS。
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
+  tab: "dashboard",
   startingAfter: null,
   hasMore: false,
   loading: false,
 };
+
+// ---- API ----
 
 async function api(path) {
   const response = await fetch(`/api${path}`);
@@ -17,6 +20,24 @@ async function api(path) {
   }
   return body;
 }
+
+// ---- 时间（北京时间 UTC+8 展示）----
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const s = d.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    hour12: false,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return s.replace(/\//g, "-");
+}
+
+// ---- 情绪展示 ----
 
 function sentimentClass(value) {
   if (value == null) return "neutral";
@@ -30,19 +51,7 @@ function sentimentText(value) {
   return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
 }
 
-function showError(message) {
-  let banner = document.querySelector(".error-banner");
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.className = "error-banner";
-    document.querySelector("main").prepend(banner);
-  }
-  banner.textContent = `⚠ ${message}`;
-}
-
-function clearError() {
-  document.querySelector(".error-banner")?.remove();
-}
+// ---- DOM 工具 ----
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -54,6 +63,21 @@ function el(tag, className, text) {
 function sentimentSpan(value) {
   return el("span", `sent ${sentimentClass(value)}`, sentimentText(value));
 }
+
+function showError(message) {
+  let banner = document.querySelector(".error-banner");
+  if (!banner) {
+    banner = el("div", "error-banner");
+    document.querySelector("main").prepend(banner);
+  }
+  banner.textContent = `⚠ ${message}`;
+}
+
+function clearError() {
+  document.querySelector(".error-banner")?.remove();
+}
+
+// ---- 仪表盘 ----
 
 async function loadOverview() {
   const data = await api("/sentiment/overview");
@@ -70,9 +94,7 @@ async function loadOverview() {
     card.append(el("div", "label", label), valueNode);
     container.append(card);
   }
-  $("updated-at").textContent = data.generated_at
-    ? `更新于 ${data.generated_at.replace("T", " ").replace("Z", " UTC")}`
-    : "";
+  $("updated-at").textContent = data.generated_at ? `更新于 ${fmtTime(data.generated_at)}` : "";
 }
 
 async function loadTimeseries() {
@@ -114,28 +136,54 @@ async function loadFactors() {
   }
 }
 
-function renderEvent(event) {
+async function refreshDashboard() {
+  clearError();
+  try {
+    await Promise.all([loadOverview(), loadTimeseries(), loadFactors()]);
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+// ---- 事件渲染（列表 + 详情共用）----
+
+function renderEventMeta(event) {
+  const parts = [];
+  if (event.first_seen_at) parts.push(fmtTime(event.first_seen_at));
+  parts.push("· 情绪");
+  const meta = el("div", "meta");
+  meta.append(el("span", null, parts.join(" ")));
+  meta.append(sentimentSpan(event.sentiment));
+  if (event.impact != null) {
+    meta.append(
+      el("span", null, ` · 影响 ${event.impact.toFixed(2)} · 报道 ${event.report_count ?? 1}`),
+    );
+  }
+  return meta;
+}
+
+function renderEventSources(sources) {
+  const box = el("div", "sources");
+  for (const source of new Set(sources ?? [])) {
+    box.append(el("span", "tag", source));
+  }
+  return box;
+}
+
+function renderEventCard(event, clickable = true) {
   const card = el("div", "event");
   card.append(el("div", "title", event.title));
-  const metaParts = [];
-  if (event.first_seen_at) {
-    metaParts.push(event.first_seen_at.replace("T", " ").replace("Z", " UTC"));
-  }
-  metaParts.push("· 情绪");
-  const meta = el("div", "meta");
-  meta.append(el("span", null, metaParts.join(" ")));
-  meta.append(sentimentSpan(event.sentiment));
-  const impact = event.impact != null ? ` · 影响 ${event.impact.toFixed(2)}` : "";
-  meta.append(el("span", null, `${impact} · 报道 ${event.report_count ?? 1}`));
-  card.append(meta);
+  card.append(renderEventMeta(event));
   if (event.summary) card.append(el("div", "summary", event.summary));
-  if (event.sources?.length) {
-    const sources = el("div", "sources");
-    for (const source of event.sources) sources.append(el("span", "tag", source));
-    card.append(sources);
+  card.append(renderEventSources(event.sources));
+  if (clickable) {
+    card.classList.add("clickable");
+    card.addEventListener("click", () => openDetail(event.id));
   }
   return card;
 }
+
+// ---- 时间线 ----
 
 async function loadTimeline(reset = false) {
   if (state.loading) return;
@@ -152,7 +200,7 @@ async function loadTimeline(reset = false) {
     state.hasMore = data.has_more;
     state.startingAfter = data.starting_after ?? null;
     const list = $("timeline");
-    for (const event of data.events) list.append(renderEvent(event));
+    for (const event of data.events) list.append(renderEventCard(event));
     $("timeline-status").textContent = data.total
       ? `共 ${data.total} 个事件${state.hasMore ? "，继续下拉加载" : ""}`
       : "暂无事件（等待首轮采集）";
@@ -162,6 +210,67 @@ async function loadTimeline(reset = false) {
     $("load-more").disabled = false;
   }
 }
+
+// ---- 事件详情（含报道正文）----
+
+async function openDetail(eventId) {
+  clearError();
+  try {
+    const event = await api(`/events/${eventId}`);
+    const container = $("event-detail");
+    container.replaceChildren();
+
+    container.append(el("h2", null, event.title));
+    const meta = renderEventMeta(event);
+    meta.append(el("span", null, ` · 首次 ${fmtTime(event.first_seen_at)}`));
+    container.append(meta);
+    if (event.summary) container.append(el("p", "detail-summary", event.summary));
+    if (event.related_symbols?.length) {
+      const block = el("div", "detail-block");
+      block.append(el("strong", null, "相关标的："));
+      const tags = el("div", "sources");
+      for (const s of event.related_symbols) tags.append(el("span", "tag", s));
+      block.append(tags);
+      container.append(block);
+    }
+    if (event.factors && Object.keys(event.factors).length) {
+      const block = el("div", "detail-block");
+      block.append(el("strong", null, "因子"));
+      const factors = el("div", "factors");
+      for (const [name, value] of Object.entries(event.factors)) {
+        const f = el("div", "factor");
+        f.append(el("strong", null, name), sentimentSpan(value));
+        factors.append(f);
+      }
+      block.append(factors);
+      container.append(block);
+    }
+
+    container.append(el("h3", null, `报道（${event.reports?.length ?? 0} 篇）`));
+    for (const report of event.reports ?? []) {
+      const block = el("div", "report");
+      const head = el("div", "report-head");
+      head.append(
+        el("span", "tag", report.source),
+        el("span", null, ` ${fmtTime(report.published_at || report.collected_at)}`),
+      );
+      const link = el("a", null, report.title);
+      link.href = report.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      head.append(link);
+      block.append(head);
+      if (report.raw_text) block.append(el("p", "report-text", report.raw_text));
+      container.append(block);
+    }
+
+    switchTo("detail");
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+// ---- 搜索 ----
 
 async function doSearch() {
   const query = $("search-input").value.trim();
@@ -176,23 +285,36 @@ async function doSearch() {
   if (!data.results.length) {
     list.append(el("div", "muted", "无结果"));
   } else {
-    for (const result of data.results) list.append(renderEvent(result));
+    for (const result of data.results) list.append(renderEventCard(result));
   }
   $("search-results").hidden = false;
 }
 
-async function refreshAll() {
-  clearError();
-  try {
-    await Promise.all([loadOverview(), loadTimeseries(), loadFactors()]);
-  } catch (error) {
-    showError(error.message);
+// ---- Tab 切换 ----
+
+function switchTo(tab) {
+  state.tab = tab;
+  $("tab-dashboard").classList.toggle("active", tab === "dashboard");
+  $("tab-timeline").classList.toggle("active", tab === "timeline");
+  $("view-dashboard").hidden = tab !== "dashboard";
+  $("view-timeline").hidden = tab !== "timeline";
+  $("view-detail").hidden = tab !== "detail";
+  $("search-results").hidden = tab !== "search";
+  if (tab === "timeline") {
+    loadTimeline(true);
+  } else if (tab === "dashboard") {
+    refreshDashboard();
   }
 }
 
+// ---- 事件绑定 ----
+
+$("tab-dashboard").addEventListener("click", () => switchTo("dashboard"));
+$("tab-timeline").addEventListener("click", () => switchTo("timeline"));
+$("back-btn").addEventListener("click", () => switchTo("timeline"));
 $("refresh-btn").addEventListener("click", () => {
-  refreshAll();
-  loadTimeline(true);
+  if (state.tab === "dashboard") refreshDashboard();
+  else if (state.tab === "timeline") loadTimeline(true);
 });
 $("load-more").addEventListener("click", () => loadTimeline(false));
 $("search-btn").addEventListener("click", doSearch);
@@ -200,6 +322,7 @@ $("search-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") doSearch();
 });
 
-refreshAll();
-loadTimeline(true);
-setInterval(refreshAll, 60_000); // 情绪面板每分钟自动刷新
+refreshDashboard();
+setInterval(() => {
+  if (state.tab === "dashboard") refreshDashboard();
+}, 60_000);

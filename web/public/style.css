@@ -5,9 +5,12 @@
   --text: #e6edf3;
   --muted: #8b98a5;
   --accent: #4da3ff;
-  --up: #e5484d; /* A 股习惯：红涨 */
-  --down: #46a758; /* 绿跌 */
+  --up: #e5484d;
+  /* A 股习惯：红涨 */
+  --down: #46a758;
+  /* 绿跌 */
   --neutral: #8b98a5;
+  --radius: 12px;
 }
 
 * {
@@ -28,30 +31,32 @@ body {
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 24px;
+  gap: 20px;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(8px);
   z-index: 10;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 17px;
   margin: 0;
+  white-space: nowrap;
 }
 
 h2 {
-  font-size: 15px;
-  margin: 24px 0 12px;
+  font-size: 14px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+h3 {
+  font-size: 14px;
+  margin: 20px 0 10px;
 }
 
 .muted {
@@ -59,22 +64,61 @@ h2 {
   font-size: 12px;
 }
 
+/* ---- Tab ---- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  padding: 5px 16px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  background: #26313c;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
 input[type="search"] {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
   padding: 6px 10px;
-  width: 260px;
+  width: 240px;
 }
 
 button {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 14px;
   cursor: pointer;
+  font-size: 13px;
 }
 
 button:hover {
@@ -82,22 +126,55 @@ button:hover {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 16px 24px 48px;
+  padding: 20px 24px 60px;
 }
+
+/* ---- Bento 布局 ---- */
+
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.bento-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.bento-card.span-2 {
+  grid-column: span 2;
+}
+
+#overview-card {
+  grid-row: span 1;
+}
+
+#timeseries-card {
+  grid-column: span 2;
+}
+
+#factors-card {
+  grid-column: span 4;
+}
+
+/* ---- 情绪总览卡片 ---- */
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
 }
 
 .card {
-  background: var(--panel);
+  background: #141b23;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .card .label {
@@ -109,49 +186,6 @@ main {
   font-size: 22px;
   font-weight: 600;
   margin-top: 4px;
-}
-
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.event {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-}
-
-.event .title {
-  font-weight: 600;
-}
-
-.event .meta {
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.event .summary {
-  margin-top: 6px;
-  color: #c9d4de;
-}
-
-.event .sources {
-  margin-top: 6px;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  background: #232d38;
-  border-radius: 4px;
-  padding: 1px 8px;
-  font-size: 12px;
-  color: var(--muted);
 }
 
 .sent {
@@ -170,11 +204,14 @@ main {
   color: var(--neutral);
 }
 
+/* ---- 柱状图 ---- */
+
 .bars {
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  height: 120px;
+  height: 130px;
+  padding-top: 18px;
 }
 
 .bar {
@@ -183,6 +220,8 @@ main {
   background: var(--neutral);
   min-height: 2px;
   position: relative;
+  opacity: 0.9;
+  transition: height 0.4s ease;
 }
 
 .bar.up {
@@ -212,17 +251,19 @@ main {
   font-size: 11px;
 }
 
+/* ---- 因子 ---- */
+
 .factors {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .factor {
-  background: var(--panel);
+  background: #141b23;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-radius: 8px;
+  padding: 8px 12px;
 }
 
 .factor .row {
@@ -237,6 +278,61 @@ main {
   margin-top: 2px;
 }
 
+/* ---- 事件列表 ---- */
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.15s;
+}
+
+.event.clickable {
+  cursor: pointer;
+}
+
+.event.clickable:hover {
+  border-color: var(--accent);
+}
+
+.event .title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.event .meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.event .summary {
+  margin-top: 6px;
+  color: #c9d4de;
+}
+
+.event .sources {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: #232d38;
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .pager {
   display: flex;
   align-items: center;
@@ -244,11 +340,86 @@ main {
   margin-top: 14px;
 }
 
+/* ---- 事件详情 ---- */
+
+#back-btn {
+  margin-bottom: 14px;
+}
+
+.detail-summary {
+  color: #c9d4de;
+  margin: 10px 0;
+}
+
+.detail-block {
+  margin-top: 12px;
+}
+
+.report {
+  background: #141b23;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.report-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-head a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.report-head a:hover {
+  text-decoration: underline;
+}
+
+.report-text {
+  margin: 10px 0 0;
+  color: #c9d4de;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ---- 其他 ---- */
+
 .error-banner {
   background: #3a1d1d;
   border: 1px solid #7a3a3a;
   color: #ffb4b4;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 14px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  header {
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    order: 3;
+    width: 100%;
+  }
+
+  input[type="search"] {
+    flex: 1;
+  }
+
+  .bento {
+    grid-template-columns: 1fr;
+  }
+
+  #timeseries-card,
+  #factors-card,
+  .bento-card.span-2 {
+    grid-column: span 1;
+  }
 }
