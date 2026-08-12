@@ -121,11 +121,21 @@ async function loadFactors() {
   const container = $("factors");
   container.replaceChildren();
   for (const f of data.factors) {
+    const factor = el("div", "factor");
     const row = el("div", "row");
     row.append(el("strong", null, f.factor), sentimentSpan(f.avg));
-    const factor = el("div", "factor");
+    factor.append(row);
+    // 情绪条：宽度按 |值| 比例（正值红、负值绿），无数据置灰
+    const track = el("div", "bar-track");
+    const fill = el("div", "bar-fill");
+    if (f.avg != null) {
+      const width = Math.min(Math.abs(f.avg) * 50, 50);
+      fill.style.width = `${width}%`;
+      fill.classList.add(sentimentClass(f.avg));
+    }
+    track.append(fill);
+    factor.append(track);
     factor.append(
-      row,
       el(
         "div",
         "desc",
