@@ -18,7 +18,7 @@ import httpx
 
 from .config import Config
 
-_CALL_TIMEOUT_SECONDS = 90.0
+_CALL_TIMEOUT_SECONDS = 120.0
 
 
 class MCPError(RuntimeError):
@@ -49,7 +49,7 @@ class WigoloMCP:
 
         wigolo 忙碌时返回 429（并发槽满），指数退避重试最多 3 次。
         """
-        payload: dict[str, Any] = {"url": url, "timeoutMs": 60000}
+        payload: dict[str, Any] = {"url": url, "timeoutMs": 90000}
         if kw.get("max_content_chars"):
             payload["max_content_chars"] = kw["max_content_chars"]
         if kw.get("render_js"):
