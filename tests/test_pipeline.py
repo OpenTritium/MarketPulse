@@ -204,8 +204,8 @@ def test_network_and_llm_work_respect_their_independent_concurrency_limits(
     analyzer = TrackingAnalyzer.instance
     assert mcp is not None
     assert analyzer is not None
-    assert mcp.max_active == 4
-    assert analyzer.max_active == 4
+    assert mcp.max_active == 2  # _FETCH_CONCURRENCY：与 wigolo concurrency 匹配
+    assert analyzer.max_active == 4  # _ANALYSIS_CONCURRENCY 独立
     assert stats["new"] == len(sources)
     assert stats["failed"] == 0
     assert FakeStore.instances[0].closed

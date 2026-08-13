@@ -76,7 +76,5 @@ class WigoloMCP:
                 await asyncio.sleep(2 * (attempt + 1))
                 continue
             if response.status_code >= 400:
-                raise MCPError(
-                    f"fetch 失败 HTTP {response.status_code}: {url}"
-                )
+                raise MCPError(f"fetch 失败 HTTP {response.status_code}: {url}")
             return response.json()
