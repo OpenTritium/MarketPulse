@@ -45,7 +45,10 @@ class WigoloMCP:
         await self._client.aclose()
 
     async def fetch(self, url: str, **kw: Any) -> Any:
-        """抓取页面并返回 JSON；kw 透传 max_content_chars / render_js / actions。"""
+        """抓取页面并返回 JSON；kw 透传 max_content_chars / render_js / actions。
+
+        wigolo 忙碌时返回 429（并发槽满），指数退避重试最多 3 次。
+        """
         payload: dict[str, Any] = {"url": url, "timeoutMs": 60000}
         if kw.get("max_content_chars"):
             payload["max_content_chars"] = kw["max_content_chars"]
@@ -53,21 +56,27 @@ class WigoloMCP:
             payload["render_js"] = kw["render_js"]
         if kw.get("actions"):
             payload["actions"] = kw["actions"]
-        try:
-            response = await asyncio.wait_for(
-                self._client.post(
-                    f"{self._rest_base}/fetch",
-                    json=payload,
-                    headers=self._headers,
-                ),
-                timeout=_CALL_TIMEOUT_SECONDS,
-            )
-        except TimeoutError as exc:
-            raise MCPError(
-                f"fetch 超时（>{_CALL_TIMEOUT_SECONDS:.0f}s）: {url}"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise MCPError(f"fetch 调用失败: {exc}") from exc
-        if response.status_code >= 400:
-            raise MCPError(f"fetch 失败 HTTP {response.status_code}: {url}")
-        return response.json()
+        for attempt in range(3):
+            try:
+                response = await asyncio.wait_for(
+                    self._client.post(
+                        f"{self._rest_base}/fetch",
+                        json=payload,
+                        headers=self._headers,
+                    ),
+                    timeout=_CALL_TIMEOUT_SECONDS,
+                )
+            except TimeoutError as exc:
+                raise MCPError(
+                    f"fetch 超时（>{_CALL_TIMEOUT_SECONDS:.0f}s）: {url}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise MCPError(f"fetch 调用失败: {exc}") from exc
+            if response.status_code == 429 and attempt < 2:
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            if response.status_code >= 400:
+                raise MCPError(
+                    f"fetch 失败 HTTP {response.status_code}: {url}"
+                )
+            return response.json()
