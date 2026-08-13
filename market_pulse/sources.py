@@ -12,15 +12,13 @@
 from __future__ import annotations
 
 SOURCES: dict[str, str] = {
-    # 快讯/资讯类
+    # 快讯/资讯类（2G VPS 串行抓取预算内：单轮 ~6 分钟）
     "财联社电报": "https://www.cls.cn/telegraph",
     "华尔街见闻": "https://www.wallstreetcn.com/live",
     "第一财经": "https://www.yicai.com/",
-    "新浪财经7x24": "https://finance.sina.com.cn/7x24/",
-    "金十数据": "https://www.jin10.com/",
-    "证券时报": "https://www.stcn.com/",
     "智通财经": "https://www.zhitongcaijing.com/",
-    # 国际视角（VPS 大陆网络可达）
     "汇通网": "https://www.fx678.com/",
     "新浪美股": "https://finance.sina.com.cn/stock/usstock/",
+    # 注：新浪7x24 / 金十 / 证券时报已移除——页面渲染慢（30-90s），
+    # 串行抓取下拖垮整轮（曾致 900s 超时）；VPS 内存升级后可考虑加回。
 }

@@ -15,7 +15,7 @@ from .pipeline import run_collect
 
 DEFAULT_COLLECT_INTERVAL_SECONDS = 30 * 60
 DEFAULT_COLLECT_DELAY_SECONDS = 30
-_COLLECT_TIMEOUT_SECONDS = 900
+_COLLECT_TIMEOUT_SECONDS = 1500  # 30m 周期内给串行采集留 25 分钟
 _DURATION_PATTERN = re.compile(r"(?P<amount>\d+)(?P<unit>[smh])")
 
 

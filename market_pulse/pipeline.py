@@ -24,7 +24,7 @@ _log = logging.getLogger("collect")
 
 _JS_SITES = ("cls.cn", "wallstreetcn", "eastmoney")
 _WAIT_SITES = {"eastmoney": 4000}
-_MAX_ITEMS_PER_SOURCE = 20
+_MAX_ITEMS_PER_SOURCE = 12  # 2G VPS 串行抓取：每源 12 篇，单轮 ~6 分钟
 _FETCH_CONCURRENCY = (
     1  # 串行抓取：2G VPS 下并发 chrome 渲染会触发 global OOM（wigolo 曾被杀）
 )
