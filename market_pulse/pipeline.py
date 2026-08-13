@@ -10,6 +10,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .config import Config
@@ -205,15 +206,30 @@ class Collector:
             item.analysis.summary or item.fetched.item.title for item in relevant_items
         ]
         vectors = await asyncio.to_thread(self.embedder.embed_many, texts)
+        # 未来时间闸门：预告类新闻（发布会/更新）的 published_at 可能是源站
+        # 标注的未来时刻，超过 2 小时视为无效，置 None 用采集时间兜底
+        future_cutoff = datetime.now(UTC) + timedelta(hours=2)
         with self.store.batch():
             for analyzed, vector in zip(relevant_items, vectors, strict=True):
                 source = analyzed.fetched.source
                 stats = stats_by_source[source["name"]]
+                pub = analyzed.fetched.item.published_at or None
+                try:
+                    if pub and datetime.fromisoformat(pub) > future_cutoff:
+                        _log.info(
+                            "[%s] 忽略未来发布时间 %s: %s",
+                            source["name"],
+                            pub,
+                            analyzed.fetched.item.title,
+                        )
+                        pub = None
+                except (ValueError, TypeError):
+                    pub = None
                 report = Report(
                     url=analyzed.fetched.item.url,
                     source=source["name"],
                     title=analyzed.fetched.item.title,
-                    published_at=analyzed.fetched.item.published_at or None,
+                    published_at=pub,
                     raw_text=analyzed.fetched.content,
                     summary=analyzed.analysis.summary,
                     headline=analyzed.analysis.headline,
