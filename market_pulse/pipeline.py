@@ -24,7 +24,7 @@ _log = logging.getLogger("collect")
 _JS_SITES = ("cls.cn", "wallstreetcn", "eastmoney")
 _WAIT_SITES = {"eastmoney": 4000}
 _MAX_ITEMS_PER_SOURCE = 20
-_FETCH_CONCURRENCY = 2  # 与 wigolo WIGOLO_SERVE_MAX_CONCURRENCY=2 匹配，避免 429
+_FETCH_CONCURRENCY = 1  # 串行抓取：2G VPS 下并发 chrome 渲染会触发 global OOM（wigolo 曾被杀）
 _ANALYSIS_CONCURRENCY = 4
 
 Source = dict[str, str]
