@@ -18,7 +18,7 @@ import httpx
 
 from .config import Config
 
-_CALL_TIMEOUT_SECONDS = 60.0
+_CALL_TIMEOUT_SECONDS = 90.0
 
 
 class MCPError(RuntimeError):
@@ -46,7 +46,7 @@ class WigoloMCP:
 
     async def fetch(self, url: str, **kw: Any) -> Any:
         """抓取页面并返回 JSON；kw 透传 max_content_chars / render_js / actions。"""
-        payload: dict[str, Any] = {"url": url, "timeoutMs": 45000}
+        payload: dict[str, Any] = {"url": url, "timeoutMs": 60000}
         if kw.get("max_content_chars"):
             payload["max_content_chars"] = kw["max_content_chars"]
         if kw.get("render_js"):
